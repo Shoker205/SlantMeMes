@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PersonRemove
@@ -232,7 +232,7 @@ fun OtherProfileScreen(
                     )
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Chat,
+                        imageVector = Icons.AutoMirrored.Filled.Chat,
                         contentDescription = null,
                         modifier = Modifier.size(20.dp)
                     )

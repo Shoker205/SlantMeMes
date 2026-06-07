@@ -104,7 +104,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             focusedContainerColor = bgColor,
                             unfocusedContainerColor = bgColor
                         ),
-                        modifier = Modifier.menuAnchor()
+                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable)
                     )
                     ExposedDropdownMenu(
                         expanded = expanded,

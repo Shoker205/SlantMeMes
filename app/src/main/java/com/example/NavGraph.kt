@@ -75,6 +75,9 @@ fun MainAppNavigation() {
                 recipientId = userId,
                 onBack = {
                     navController.popBackStack()
+                },
+                onProfileClick = {
+                    navController.navigate("other_profile/$userId")
                 }
             )
         }

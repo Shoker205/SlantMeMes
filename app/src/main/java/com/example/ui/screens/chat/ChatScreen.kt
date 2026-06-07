@@ -15,10 +15,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Audiotrack
-import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -85,7 +85,8 @@ data class ChatMessage(
 @Composable
 fun ChatScreen(
     recipientId: String,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onProfileClick: () -> Unit = {}
 ) {
     var messages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
     var inputText by remember { mutableStateOf("") }
@@ -134,12 +135,7 @@ fun ChatScreen(
                     
                     newMessages.add(ChatMessage(id, senderId, decryptedText, type, timestamp, mediaUrl))
                 }
-                messages = newMessages.sortedBy { it.timestamp }
-                scope.launch {
-                    if (messages.isNotEmpty()) {
-                        listState.scrollToItem(messages.size - 1)
-                    }
-                }
+                messages = newMessages.sortedByDescending { it.timestamp }
             }
             override fun onCancelled(error: DatabaseError) {}
         })
@@ -161,6 +157,12 @@ fun ChatScreen(
         )
         database.getReference("user_chats").child(currentUser.uid).child(recipientId).setValue(chatMeta)
         database.getReference("user_chats").child(recipientId).child(currentUser.uid).setValue(chatMeta)
+        
+        scope.launch {
+            if (messages.isNotEmpty()) {
+                listState.animateScrollToItem(0)
+            }
+        }
     }
 
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
@@ -174,7 +176,10 @@ fun ChatScreen(
         topBar = {
             TopAppBar(
                 title = { 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { onProfileClick() }
+                    ) {
                         Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(surfaceColor)) {
                             if (recipientAvatar.isNotBlank()) {
                                 com.example.ui.components.AvatarImage(avatarUrl = recipientAvatar, contentDescription = null, modifier = Modifier.fillMaxSize())
@@ -204,6 +209,7 @@ fun ChatScreen(
                     .weight(1f)
                     .fillMaxWidth(),
                 state = listState,
+                reverseLayout = true,
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -240,7 +246,7 @@ fun ChatScreen(
                                             "image" -> Icons.Default.Image
                                             "video" -> Icons.Default.Videocam
                                             "audio" -> Icons.Default.Audiotrack
-                                            else -> Icons.Default.InsertDriveFile
+                                            else -> Icons.AutoMirrored.Filled.InsertDriveFile
                                         }
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Icon(icon, contentDescription = null, tint = if (isMine) bubbleSentContentColor else textColor, modifier = Modifier.size(24.dp))
@@ -290,7 +296,7 @@ fun ChatScreen(
                             )
                             DropdownMenuItem(
                                 text = { Text("Файл", color = textColor) },
-                                leadingIcon = { Icon(Icons.Default.InsertDriveFile, contentDescription = null, tint = dimTextColor) },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.InsertDriveFile, contentDescription = null, tint = dimTextColor) },
                                 onClick = { showAttachmentMenu = false; launcher.launch("*/*") }
                             )
                         }

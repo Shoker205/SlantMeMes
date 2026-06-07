@@ -10,7 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
@@ -198,7 +198,7 @@ fun ChatListScreen(
             ModalDrawerSheet(
                 drawerContainerColor = bgColor,
                 drawerShape = RoundedCornerShape(topEnd = 0.dp, bottomEnd = 0.dp),
-                modifier = Modifier.widthIn(max = 310.dp)
+                modifier = Modifier.width(310.dp)
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     Box(modifier = Modifier
@@ -303,7 +303,7 @@ fun ChatListScreen(
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Chat,
+                                    imageVector = Icons.AutoMirrored.Filled.Chat,
                                     contentDescription = null,
                                     tint = dimTextColor,
                                     modifier = Modifier.size(64.dp)
@@ -591,7 +591,7 @@ fun ChatListScreen(
                         .padding(horizontal = 16.dp, vertical = 6.dp)
                 ) {
                     val activeIcons = listOf(
-                        Icons.Default.Chat,
+                        Icons.AutoMirrored.Filled.Chat,
                         Icons.Default.Person,
                         Icons.Default.Group
                     )
