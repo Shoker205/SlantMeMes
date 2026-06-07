@@ -80,7 +80,7 @@ object PushNotificationManager {
         )
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_email)
+            .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle(title)
             .setContentText(messageText)
             .setPriority(NotificationCompat.PRIORITY_HIGH)

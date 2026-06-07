@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -78,7 +79,8 @@ data class ChatMessage(
     val text: String = "",
     val type: String = "text",
     val timestamp: Long = 0L,
-    val mediaUrl: String = ""
+    val mediaUrl: String = "",
+    val isRead: Boolean = false
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -130,12 +132,20 @@ fun ChatScreen(
                     val type = child.child("type").getValue(String::class.java) ?: "text"
                     val timestamp = child.child("timestamp").getValue(Long::class.java) ?: 0L
                     val mediaUrl = child.child("mediaUrl").getValue(String::class.java) ?: ""
+                    val isRead = child.child("isRead").getValue(Boolean::class.java) ?: false
                     
                     val decryptedText = if (type == "text") ChatCrypto.decrypt(encryptedText, chatId) else encryptedText
                     
-                    newMessages.add(ChatMessage(id, senderId, decryptedText, type, timestamp, mediaUrl))
+                    newMessages.add(ChatMessage(id, senderId, decryptedText, type, timestamp, mediaUrl, isRead))
+                    
+                    if (senderId != currentUser.uid && !isRead) {
+                        child.ref.child("isRead").setValue(true)
+                    }
                 }
-                messages = newMessages.sortedByDescending { it.timestamp }
+                messages = newMessages.sortedBy { it.timestamp }
+                
+                // Reset unread count for current user
+                database.getReference("user_chats").child(currentUser.uid).child(recipientId).child("unreadCount").setValue(0)
             }
             override fun onCancelled(error: DatabaseError) {}
         })
@@ -151,13 +161,23 @@ fun ChatScreen(
         val msg = ChatMessage(newMsgId, currentUser.uid, encryptedText, type, System.currentTimeMillis(), mediaUrl)
         messagesRef.child(newMsgId).setValue(msg)
         
-        val chatMeta = mapOf(
+        val chatMetaMe = mapOf(
             "lastMessage" to (if (type == "text") encryptedText else "[$type]"),
             "timestamp" to System.currentTimeMillis(),
             "lastSenderId" to currentUser.uid
         )
-        database.getReference("user_chats").child(currentUser.uid).child(recipientId).setValue(chatMeta)
-        database.getReference("user_chats").child(recipientId).child(currentUser.uid).setValue(chatMeta)
+        database.getReference("user_chats").child(currentUser.uid).child(recipientId).updateChildren(chatMetaMe)
+        
+        database.getReference("user_chats").child(recipientId).child(currentUser.uid).get().addOnSuccessListener { snap ->
+            val currentUnread = snap.child("unreadCount").getValue(Int::class.java) ?: 0
+            val chatMetaThem = mapOf(
+                "lastMessage" to (if (type == "text") encryptedText else "[$type]"),
+                "timestamp" to System.currentTimeMillis(),
+                "lastSenderId" to currentUser.uid,
+                "unreadCount" to currentUnread + 1
+            )
+            database.getReference("user_chats").child(recipientId).child(currentUser.uid).updateChildren(chatMetaThem)
+        }
         
         scope.launch {
             if (messages.isNotEmpty()) {
@@ -241,19 +261,57 @@ fun ChatScreen(
                                         lineHeight = 20.sp
                                     )
                                 }
-                                "image", "video", "audio", "media", "file" -> {
+                                "image", "video" -> {
+                                    Column {
+                                        if (msg.mediaUrl.isNotBlank()) {
+                                            Box(modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp).clip(RoundedCornerShape(8.dp))) {
+                                                coil.compose.AsyncImage(
+                                                    model = msg.mediaUrl,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                                )
+                                                if (msg.type == "video") {
+                                                    Box(
+                                                        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Icon(Icons.Default.Videocam, contentDescription = "Video", tint = Color.White, modifier = Modifier.size(48.dp))
+                                                    }
+                                                }
+                                            }
+                                            Spacer(Modifier.height(4.dp))
+                                        }
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(if (msg.type == "image") Icons.Default.Image else Icons.Default.Videocam, contentDescription = null, tint = if (isMine) bubbleSentContentColor else textColor, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text(msg.text, color = if (isMine) bubbleSentContentColor else textColor, fontSize = 14.sp)
+                                        }
+                                    }
+                                }
+                                "audio", "media", "file" -> {
                                     Column {
                                         val icon = when(msg.type) {
-                                            "image" -> Icons.Default.Image
-                                            "video" -> Icons.Default.Videocam
                                             "audio" -> Icons.Default.Audiotrack
-                                            else -> Icons.AutoMirrored.Filled.InsertDriveFile
+                                            else -> androidx.compose.material.icons.Icons.AutoMirrored.Filled.InsertDriveFile
                                         }
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Icon(icon, contentDescription = null, tint = if (isMine) bubbleSentContentColor else textColor, modifier = Modifier.size(24.dp))
                                             Spacer(Modifier.width(8.dp))
                                             Text(msg.text, color = if (isMine) bubbleSentContentColor else textColor, fontSize = 14.sp)
                                         }
+                                    }
+                                }
+                            }
+                            if (isMine) {
+                                Row(
+                                    modifier = Modifier.padding(top = 4.dp).align(Alignment.BottomEnd),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    val iconTint = if (msg.isRead) Color(0xFF4FC3F7) else bubbleSentContentColor.copy(alpha = 0.7f)
+                                    Icon(Icons.Default.Check, contentDescription = "Tick", tint = iconTint, modifier = Modifier.size(16.dp))
+                                    if (msg.isRead) {
+                                        Icon(Icons.Default.Check, contentDescription = "Read", tint = iconTint, modifier = Modifier.size(16.dp).offset(x = (-8).dp))
                                     }
                                 }
                             }

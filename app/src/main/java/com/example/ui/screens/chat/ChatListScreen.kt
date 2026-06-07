@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import androidx.compose.runtime.LaunchedEffect
 
-data class ChatItem(val id: String, val name: String, val username: String, val isOnline: Boolean, val timestamp: Long = 0L)
+data class ChatItem(val id: String, val name: String, val username: String, val isOnline: Boolean, val timestamp: Long = 0L, val avatarUrl: String = "", val unreadCount: Int = 0)
 data class UserProfile(val uid: String, val name: String, val username: String, val avatarUrl: String)
 
 @Composable
@@ -171,13 +171,15 @@ fun ChatListScreen(
                         for (child in snapshot.children) {
                             val peerId = child.key ?: continue
                             val timestamp = child.child("timestamp").getValue(Long::class.java) ?: 0L
+                            val unreadCount = child.child("unreadCount").getValue(Int::class.java) ?: 0
                             
                             try {
                                 val userSnap = database.getReference("users").child(peerId).get().await()
                                 val name = userSnap.child("name").getValue(String::class.java) ?: "User"
                                 val username = userSnap.child("username").getValue(String::class.java) ?: ""
+                                val avatarUrl = userSnap.child("avatarUrl").getValue(String::class.java) ?: ""
                                 // Normally you'd monitor online status from RTDB presence
-                                chatsList.add(ChatItem(peerId, name, username, true, timestamp))
+                                chatsList.add(ChatItem(peerId, name, username, true, timestamp, avatarUrl, unreadCount))
                             } catch (e: Exception) {
                                 // Ignore
                             }
@@ -345,7 +347,15 @@ fun ChatListScreen(
                                                 .border(1.dp, borderColor, RoundedCornerShape(16.dp)),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Text(chat.name.take(1), color = textColor, fontWeight = FontWeight.Bold)
+                                            if (chat.avatarUrl.isNotBlank()) {
+                                                com.example.ui.components.AvatarImage(
+                                                    avatarUrl = chat.avatarUrl,
+                                                    contentDescription = "Аватар",
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            } else {
+                                                Text(chat.name.take(1), color = textColor, fontWeight = FontWeight.Bold)
+                                            }
                                             if (chat.isOnline) {
                                                 Box(
                                                     modifier = Modifier
@@ -358,9 +368,26 @@ fun ChatListScreen(
                                             }
                                         }
                                         Spacer(modifier = Modifier.width(14.dp))
-                                        Column {
+                                        Column(modifier = Modifier.weight(1f)) {
                                             Text(chat.name, color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                                             Text(chat.username, color = dimTextColor, fontSize = 13.sp)
+                                        }
+                                        if (chat.unreadCount > 0) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .padding(start = 8.dp)
+                                                    .size(24.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color(0xFF007AFF)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = chat.unreadCount.toString(),
+                                                    color = Color.White,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
                                         }
                                     }
                                 }
