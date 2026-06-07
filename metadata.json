@@ -1,0 +1,8 @@
+{
+  "name": "Slant 2",
+  "description": "A secure, encrypted chat communication platform with neural UI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "291973798736",
+    "project_id": "slantmes-64dbf",
+    "storage_bucket": "slantmes-64dbf.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:291973798736:android:f430bc317d9053c00eea55",
+        "android_client_info": {
+          "package_name": "com.aistudio.slant.xzqw"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD282PNol_E4hgWWPlbG0o1y546ZNGbmcs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

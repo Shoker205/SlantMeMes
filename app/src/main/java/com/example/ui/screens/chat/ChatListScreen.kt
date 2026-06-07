@@ -1,0 +1,596 @@
+package com.example.ui.screens.chat
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.ui.theme.*
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.FirebaseDatabase
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import androidx.compose.runtime.LaunchedEffect
+
+data class ChatItem(val id: String, val name: String, val username: String, val isOnline: Boolean)
+data class UserProfile(val uid: String, val name: String, val username: String, val avatarUrl: String)
+
+@Composable
+fun ChatListScreen(
+    onOpenDrawer: () -> Unit = {},
+    onChatClick: (String) -> Unit = {},
+    onLogout: () -> Unit = {},
+    onProfileClick: () -> Unit = {},
+    onSettingsClick: () -> Unit = {},
+    onUserClick: (String) -> Unit = {}
+) {
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    var selectedDockTab by remember { mutableIntStateOf(0) }
+    
+    var profileName by remember { mutableStateOf("Name") }
+    var profileUsername by remember { mutableStateOf("@username") }
+    var profileAvatarUrl by remember { mutableStateOf("") }
+    
+    var showLogoutDialog by remember { mutableStateOf(false) }
+
+    // Search and contacts state
+    var searchQuery by remember { mutableStateOf("") }
+    var searchResults by remember { mutableStateOf<List<UserProfile>>(emptyList()) }
+    var isSearching by remember { mutableStateOf(false) }
+
+    var contactsList by remember { mutableStateOf<List<UserProfile>>(emptyList()) }
+    var isLoadingContacts by remember { mutableStateOf(false) }
+
+    val currentUser = FirebaseAuth.getInstance().currentUser
+    val database = FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/")
+
+    // Load contacts implementation
+    LaunchedEffect(selectedDockTab, searchQuery) {
+        if (selectedDockTab == 1 && currentUser != null && searchQuery.isBlank()) {
+            isLoadingContacts = true
+            try {
+                val contactsSnap = database.getReference("users")
+                    .child(currentUser.uid)
+                    .child("contacts")
+                    .get()
+                    .await()
+                
+                val list = mutableListOf<UserProfile>()
+                for (child in contactsSnap.children) {
+                    val uid = child.key ?: continue
+                    val userSnap = database.getReference("users").child(uid).get().await()
+                    if (userSnap.exists()) {
+                        val name = userSnap.child("name").getValue(String::class.java) ?: "User"
+                        val username = userSnap.child("username").getValue(String::class.java) ?: ""
+                        val avatarUrl = userSnap.child("avatarUrl").getValue(String::class.java) ?: ""
+                        list.add(UserProfile(uid, name, username, avatarUrl))
+                    }
+                }
+                contactsList = list
+            } catch (e: Exception) {
+                // error
+            }
+            isLoadingContacts = false
+        }
+    }
+
+    // Load search query implementation
+    LaunchedEffect(searchQuery) {
+        if (searchQuery.isNotBlank() && currentUser != null) {
+            isSearching = true
+            try {
+                val usersSnap = database.getReference("users").get().await()
+                val list = mutableListOf<UserProfile>()
+                val queryClean = searchQuery.trim().lowercase().removePrefix("@")
+                
+                for (child in usersSnap.children) {
+                    val uid = child.key ?: continue
+                    if (uid == currentUser.uid) continue // skip myself
+                    
+                    val uName = child.child("name").getValue(String::class.java) ?: ""
+                    val uUsername = child.child("username").getValue(String::class.java) ?: ""
+                    val uAvatarUrl = child.child("avatarUrl").getValue(String::class.java) ?: ""
+                    
+                    if (uUsername.lowercase().contains(queryClean)) {
+                        list.add(UserProfile(uid, uName, uUsername, uAvatarUrl))
+                    }
+                }
+                searchResults = list
+            } catch (e: Exception) {
+                // error
+            }
+            isSearching = false
+        } else {
+            searchResults = emptyList()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        try {
+            val user = FirebaseAuth.getInstance().currentUser
+            if (user != null) {
+                val snapshot = FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/")
+                    .getReference("users")
+                    .child(user.uid)
+                    .get()
+                    .await()
+                
+                profileName = snapshot.child("name").getValue(String::class.java) ?: "Name"
+                val un = snapshot.child("username").getValue(String::class.java) ?: ""
+                profileUsername = if (un.isNotBlank()) "@$un" else user.email ?: "@username"
+                profileAvatarUrl = snapshot.child("avatarUrl").getValue(String::class.java) ?: ""
+            }
+        } catch (e: Exception) {
+            // keep defaults
+        }
+    }
+
+    // No fake chats
+    val chats = emptyList<ChatItem>()
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        scrimColor = Color.Black.copy(alpha = 0.7f),
+        drawerContent = {
+            ModalDrawerSheet(
+                drawerContainerColor = Black,
+                drawerShape = RoundedCornerShape(topEnd = 0.dp, bottomEnd = 0.dp),
+                modifier = Modifier.width(310.dp)
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Box(modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 40.dp, start = 24.dp, end = 24.dp, bottom = 20.dp)) {
+                        Column {
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .background(DarkSurface, RoundedCornerShape(20.dp))
+                                    .border(1.dp, LightSurface, RoundedCornerShape(20.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (profileAvatarUrl.isNotBlank()) {
+                                    coil.compose.AsyncImage(
+                                        model = profileAvatarUrl,
+                                        contentDescription = "Profile",
+                                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)),
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                    )
+                                } else {
+                                    Icon(Icons.Default.Person, contentDescription = "Profile", tint = DimText, modifier = Modifier.size(32.dp))
+                                }
+                            }
+                            Spacer(Modifier.height(15.dp))
+                            Text(profileName, color = White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                            Text(profileUsername, color = DimText, fontSize = 12.sp)
+                        }
+                    }
+                    androidx.compose.material3.HorizontalDivider(color = LightSurface, thickness = 1.dp, modifier = Modifier.padding(bottom = 10.dp))
+                    
+                    DrawerMenuItem(icon = Icons.Default.Person, text = "Мой профиль", onClick = { 
+                        scope.launch { drawerState.close() }
+                        onProfileClick() 
+                    })
+                    androidx.compose.material3.HorizontalDivider(color = LightSurface, thickness = 1.dp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+                    DrawerMenuItem(icon = Icons.Default.Settings, text = "Настройки", onClick = { 
+                        scope.launch { drawerState.close() }
+                        onSettingsClick() 
+                    })
+                    DrawerMenuItem(icon = Icons.AutoMirrored.Filled.Logout, text = "Выйти", onClick = { showLogoutDialog = true })
+                }
+            }
+        }
+    ) {
+        if (showLogoutDialog) {
+            AlertDialog(
+                onDismissRequest = { showLogoutDialog = false },
+                title = { Text("Выход", color = White) },
+                text = { Text("Вы уверены, что хотите выйти из профиля?", color = DimText) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showLogoutDialog = false
+                        onLogout()
+                    }) {
+                        Text("Выйти", color = Color(0xFFE53935))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showLogoutDialog = false }) {
+                        Text("Отмена", color = DimText)
+                    }
+                },
+                containerColor = DarkSurface,
+                titleContentColor = White,
+                textContentColor = DimText
+            )
+        }
+
+        Scaffold(
+            topBar = {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                        .statusBarsPadding(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                        Icon(imageVector = Icons.Default.Menu, contentDescription = "Menu", tint = White)
+                    }
+                    Text("SLANT", color = White, fontWeight = FontWeight.Black, letterSpacing = 3.sp)
+                    IconButton(onClick = { 
+                        selectedDockTab = 1
+                    }) {
+                        Icon(imageVector = Icons.Default.Search, contentDescription = "Search", tint = White)
+                    }
+                }
+            },
+            containerColor = Black
+        ) { innerPadding ->
+            Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                
+                when (selectedDockTab) {
+                    0 -> {
+                        // Chats Tab
+                        if (chats.isEmpty()) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.85f)
+                                    .align(Alignment.Center),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Chat,
+                                    contentDescription = null,
+                                    tint = DimText,
+                                    modifier = Modifier.size(64.dp)
+                                )
+                                Spacer(Modifier.height(16.dp))
+                                Text(
+                                    "Вы ещё никому не писали.",
+                                    color = White,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    "Перейдите во вкладку Контакты (вторая иконка) или воспользуйтесь поиском, чтобы найти собеседника.",
+                                    color = DimText,
+                                    fontSize = 13.sp,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(bottom = 100.dp)
+                            ) {
+                                items(chats) { chat ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { onChatClick(chat.id) }
+                                            .padding(horizontal = 20.dp, vertical = 14.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(48.dp)
+                                                .clip(RoundedCornerShape(16.dp))
+                                                .background(DarkSurface)
+                                                .border(1.dp, LightSurface, RoundedCornerShape(16.dp)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(chat.name.take(1), color = White, fontWeight = FontWeight.Bold)
+                                            if (chat.isOnline) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(12.dp)
+                                                        .clip(CircleShape)
+                                                        .background(SuccessGreen)
+                                                        .border(2.dp, Black, CircleShape)
+                                                        .align(Alignment.BottomEnd)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.width(14.dp))
+                                        Column {
+                                            Text(chat.name, color = White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                                            Text(chat.username, color = DimText, fontSize = 13.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    1 -> {
+                        // Contacts and Search Tab
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            // High fidelity stylized search text field compliant with M3 guidelines
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = { Text("Поиск по @username...", color = DimText) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = White,
+                                    unfocusedBorderColor = LightSurface,
+                                    focusedTextColor = White,
+                                    unfocusedTextColor = White,
+                                    cursorColor = White,
+                                    focusedContainerColor = DarkSurface,
+                                    unfocusedContainerColor = DarkSurface
+                                ),
+                                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = DimText) },
+                                trailingIcon = {
+                                    if (searchQuery.isNotEmpty()) {
+                                        IconButton(onClick = { searchQuery = "" }) {
+                                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = White)
+                                        }
+                                    }
+                                },
+                                singleLine = true
+                            )
+
+                            Spacer(Modifier.height(12.dp))
+
+                            if (searchQuery.isNotBlank()) {
+                                // Search list mode
+                                Text(
+                                    text = "РЕЗУЛЬТАТЫ ПОИСКА",
+                                    color = DimText,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.sp,
+                                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                                )
+
+                                if (isSearching) {
+                                    Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                                        CircularProgressIndicator(color = White, modifier = Modifier.size(24.dp))
+                                    }
+                                } else if (searchResults.isEmpty()) {
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth().padding(40.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("Никого не найдено", color = DimText, fontSize = 14.sp)
+                                    }
+                                } else {
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentPadding = PaddingValues(bottom = 100.dp)
+                                    ) {
+                                        items(searchResults) { user ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable { onUserClick(user.uid) }
+                                                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(44.dp)
+                                                        .clip(RoundedCornerShape(14.dp))
+                                                        .background(DarkSurface)
+                                                        .border(1.dp, LightSurface, RoundedCornerShape(14.dp)),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    if (user.avatarUrl.isNotBlank()) {
+                                                        coil.compose.AsyncImage(
+                                                            model = user.avatarUrl,
+                                                            contentDescription = "Аватар",
+                                                            modifier = Modifier.fillMaxSize(),
+                                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                                        )
+                                                    } else {
+                                                        Icon(Icons.Default.Person, contentDescription = null, tint = DimText)
+                                                    }
+                                                }
+                                                Spacer(Modifier.width(16.dp))
+                                                Column {
+                                                    Text(user.name, color = White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                                                    Text("@${user.username}", color = DimText, fontSize = 12.sp)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Contacts mode
+                                Text(
+                                    text = "МОИ КОНТАКТЫ (${contactsList.size})",
+                                    color = DimText,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.sp,
+                                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                                )
+
+                                if (isLoadingContacts) {
+                                    Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                                        CircularProgressIndicator(color = White, modifier = Modifier.size(24.dp))
+                                    }
+                                } else if (contactsList.isEmpty()) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(top = 80.dp)
+                                            .padding(horizontal = 32.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text(
+                                            "Ваш список контактов пуст",
+                                            color = White,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 15.sp,
+                                            textAlign = TextAlign.Center
+                                        )
+                                        Spacer(Modifier.height(8.dp))
+                                        Text(
+                                            "Используйте поле ввода выше, чтобы найти пользователей по их юзернейму и добавить в контакты.",
+                                            color = DimText,
+                                            fontSize = 12.sp,
+                                            textAlign = TextAlign.Center,
+                                            lineHeight = 18.sp
+                                        )
+                                    }
+                                } else {
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentPadding = PaddingValues(bottom = 100.dp)
+                                    ) {
+                                        items(contactsList) { contact ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable { onUserClick(contact.uid) }
+                                                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(44.dp)
+                                                        .clip(RoundedCornerShape(14.dp))
+                                                        .background(DarkSurface)
+                                                        .border(1.dp, LightSurface, RoundedCornerShape(14.dp)),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    if (contact.avatarUrl.isNotBlank()) {
+                                                        coil.compose.AsyncImage(
+                                                            model = contact.avatarUrl,
+                                                            contentDescription = "Аватар",
+                                                            modifier = Modifier.fillMaxSize(),
+                                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                                        )
+                                                    } else {
+                                                        Icon(Icons.Default.Person, contentDescription = null, tint = DimText)
+                                                    }
+                                                }
+                                                Spacer(Modifier.width(16.dp))
+                                                Column {
+                                                    Text(contact.name, color = White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                                                    Text("@${contact.username}", color = DimText, fontSize = 12.sp)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    2 -> {
+                        // Information/Feature Tab
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Group,
+                                contentDescription = null,
+                                tint = DimText,
+                                modifier = Modifier.size(64.dp)
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            Text(
+                                "Группы и каналы",
+                                color = White,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "Данный раздел находится во временной разработке и будет доступен в следующих обновлениях.",
+                                color = DimText,
+                                fontSize = 13.sp,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 20.sp
+                            )
+                        }
+                    }
+                }
+
+                // Dock Bar
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 24.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(Color(0xFF0F0F0F))
+                        .border(1.dp, LightSurface, RoundedCornerShape(24.dp))
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                ) {
+                    val activeIcons = listOf(
+                        Icons.Default.Chat,
+                        Icons.Default.Person,
+                        Icons.Default.Group
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        activeIcons.forEachIndexed { index, icon ->
+                            val isSelected = selectedDockTab == index
+                            IconButton(onClick = { selectedDockTab = index }) {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = "Tab $index",
+                                    tint = if (isSelected) White else DimText,
+                                    modifier = Modifier.size(if (isSelected) 26.dp else 22.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DrawerMenuItem(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 14.dp, horizontal = 24.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = text, tint = White, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(16.dp))
+        Text(text, color = White, fontSize = 14.sp)
+    }
+}
