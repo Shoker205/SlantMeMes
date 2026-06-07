@@ -227,8 +227,8 @@ fun OtherProfileScreen(
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isDarkTheme) Color(0xFF007AFF) else Color(0xFF007AFF),
-                        contentColor = Color.White
+                        containerColor = textColor,
+                        contentColor = bgColor
                     )
                 ) {
                     Icon(

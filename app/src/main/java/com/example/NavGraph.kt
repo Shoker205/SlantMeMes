@@ -78,7 +78,7 @@ fun MainAppNavigation() {
             com.example.ui.screens.chat.ChatScreen(
                 recipientId = userId,
                 onBack = {
-                    navController.popBackStack()
+                    navController.popBackStack("chat_list", inclusive = false)
                 },
                 onProfileClick = {
                     navController.navigate("other_profile/$userId")

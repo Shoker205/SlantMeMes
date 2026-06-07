@@ -26,6 +26,7 @@
             </intent-filter>
         </activity>
         <service android:name=".ChatRealtimeService" android:exported="false" />
+        <receiver android:name=".NotificationActionReceiver" android:exported="false" />
     </application>
 
 </manifest>

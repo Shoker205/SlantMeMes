@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import androidx.compose.runtime.LaunchedEffect
 
-data class ChatItem(val id: String, val name: String, val username: String, val isOnline: Boolean, val timestamp: Long = 0L, val avatarUrl: String = "", val unreadCount: Int = 0)
+data class ChatItem(val id: String, val name: String, val lastMessage: String, val isOnline: Boolean, val timestamp: Long = 0L, val avatarUrl: String = "", val unreadCount: Int = 0)
 data class UserProfile(val uid: String, val name: String, val username: String, val avatarUrl: String)
 
 @Composable
@@ -172,14 +172,21 @@ fun ChatListScreen(
                             val peerId = child.key ?: continue
                             val timestamp = child.child("timestamp").getValue(Long::class.java) ?: 0L
                             val unreadCount = child.child("unreadCount").getValue(Int::class.java) ?: 0
+                            val encryptedLastMessage = child.child("lastMessage").getValue(String::class.java) ?: ""
+                            
+                            val chatId = if (currentUser.uid < peerId) currentUser.uid + "_" + peerId else peerId + "_" + currentUser.uid
+                            val lastMessage = if (encryptedLastMessage.isNotBlank() && !encryptedLastMessage.startsWith("[")) {
+                                try { ChatCrypto.decrypt(encryptedLastMessage, chatId) } catch (e: Exception) { encryptedLastMessage }
+                            } else {
+                                encryptedLastMessage
+                            }
                             
                             try {
                                 val userSnap = database.getReference("users").child(peerId).get().await()
                                 val name = userSnap.child("name").getValue(String::class.java) ?: "User"
-                                val username = userSnap.child("username").getValue(String::class.java) ?: ""
                                 val avatarUrl = userSnap.child("avatarUrl").getValue(String::class.java) ?: ""
                                 // Normally you'd monitor online status from RTDB presence
-                                chatsList.add(ChatItem(peerId, name, username, true, timestamp, avatarUrl, unreadCount))
+                                chatsList.add(ChatItem(peerId, name, lastMessage, true, timestamp, avatarUrl, unreadCount))
                             } catch (e: Exception) {
                                 // Ignore
                             }
@@ -370,7 +377,7 @@ fun ChatListScreen(
                                         Spacer(modifier = Modifier.width(14.dp))
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(chat.name, color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                                            Text(chat.username, color = dimTextColor, fontSize = 13.sp)
+                                            Text(chat.lastMessage, color = dimTextColor, fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                                         }
                                         if (chat.unreadCount > 0) {
                                             Box(
@@ -378,12 +385,12 @@ fun ChatListScreen(
                                                     .padding(start = 8.dp)
                                                     .size(24.dp)
                                                     .clip(CircleShape)
-                                                    .background(Color(0xFF007AFF)),
+                                                    .background(textColor),
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 Text(
                                                     text = chat.unreadCount.toString(),
-                                                    color = Color.White,
+                                                    color = bgColor,
                                                     fontSize = 12.sp,
                                                     fontWeight = FontWeight.Bold
                                                 )

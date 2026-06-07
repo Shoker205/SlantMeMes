@@ -110,7 +110,8 @@ fun ChatScreen(
     val textColor = if (isDarkTheme) White else Black
     val dimTextColor = if (isDarkTheme) DimText else Color(0xFF666666)
     
-    val bubbleSentContentColor = White
+    val bubbleSentContentColor = bgColor
+    val bubbleSentBgColor = textColor
     val bubbleReceivedColor = if (isDarkTheme) Color(0xFF1E1E1E) else White
 
     var showAttachmentMenu by remember { mutableStateOf(false) }
@@ -142,7 +143,7 @@ fun ChatScreen(
                         child.ref.child("isRead").setValue(true)
                     }
                 }
-                messages = newMessages.sortedBy { it.timestamp }
+                messages = newMessages.sortedByDescending { it.timestamp }
                 
                 // Reset unread count for current user
                 database.getReference("user_chats").child(currentUser.uid).child(recipientId).child("unreadCount").setValue(0)
@@ -186,10 +187,16 @@ fun ChatScreen(
         }
     }
 
+    var pendingAttachmentType by remember { mutableStateOf("file") }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         if (uri != null) {
-            val type = "media"
-            sendMessage("Файл: ${uri.lastPathSegment}", type = "file", mediaUrl = uri.toString())
+            val label = when(pendingAttachmentType) {
+                "image" -> "[Фото]"
+                "video" -> "[Видео]"
+                "audio" -> "[Аудио]"
+                else -> "Файл: ${uri.lastPathSegment}"
+            }
+            sendMessage(label, type = pendingAttachmentType, mediaUrl = uri.toString())
         }
     }
 
@@ -240,7 +247,7 @@ fun ChatScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start
                     ) {
-                        Box(
+                        Column(
                             modifier = Modifier
                                 .widthIn(max = 280.dp)
                                 .clip(RoundedCornerShape(
@@ -249,7 +256,7 @@ fun ChatScreen(
                                     bottomStart = if (isMine) 16.dp else 4.dp, 
                                     bottomEnd = if (isMine) 4.dp else 16.dp
                                 ))
-                                .background(if (isMine) Color(0xFF007AFF) else bubbleReceivedColor)
+                                .background(if (isMine) bubbleSentBgColor else bubbleReceivedColor)
                                 .padding(horizontal = 14.dp, vertical = 10.dp)
                         ) {
                             when (msg.type) {
@@ -305,10 +312,10 @@ fun ChatScreen(
                             }
                             if (isMine) {
                                 Row(
-                                    modifier = Modifier.padding(top = 4.dp).align(Alignment.BottomEnd),
+                                    modifier = Modifier.padding(top = 4.dp).align(Alignment.End),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    val iconTint = if (msg.isRead) Color(0xFF4FC3F7) else bubbleSentContentColor.copy(alpha = 0.7f)
+                                    val iconTint = if (msg.isRead) bubbleSentContentColor else bubbleSentContentColor.copy(alpha = 0.5f)
                                     Icon(Icons.Default.Check, contentDescription = "Tick", tint = iconTint, modifier = Modifier.size(16.dp))
                                     if (msg.isRead) {
                                         Icon(Icons.Default.Check, contentDescription = "Read", tint = iconTint, modifier = Modifier.size(16.dp).offset(x = (-8).dp))
@@ -341,22 +348,22 @@ fun ChatScreen(
                             DropdownMenuItem(
                                 text = { Text("Изображение", color = textColor) },
                                 leadingIcon = { Icon(Icons.Default.Image, contentDescription = null, tint = dimTextColor) },
-                                onClick = { showAttachmentMenu = false; launcher.launch("image/*") }
+                                onClick = { showAttachmentMenu = false; pendingAttachmentType = "image"; launcher.launch("image/*") }
                             )
                             DropdownMenuItem(
                                 text = { Text("Видео", color = textColor) },
                                 leadingIcon = { Icon(Icons.Default.Videocam, contentDescription = null, tint = dimTextColor) },
-                                onClick = { showAttachmentMenu = false; launcher.launch("video/*") }
+                                onClick = { showAttachmentMenu = false; pendingAttachmentType = "video"; launcher.launch("video/*") }
                             )
                             DropdownMenuItem(
                                 text = { Text("Аудио", color = textColor) },
                                 leadingIcon = { Icon(Icons.Default.Audiotrack, contentDescription = null, tint = dimTextColor) },
-                                onClick = { showAttachmentMenu = false; launcher.launch("audio/*") }
+                                onClick = { showAttachmentMenu = false; pendingAttachmentType = "audio"; launcher.launch("audio/*") }
                             )
                             DropdownMenuItem(
                                 text = { Text("Файл", color = textColor) },
                                 leadingIcon = { Icon(Icons.AutoMirrored.Filled.InsertDriveFile, contentDescription = null, tint = dimTextColor) },
-                                onClick = { showAttachmentMenu = false; launcher.launch("*/*") }
+                                onClick = { showAttachmentMenu = false; pendingAttachmentType = "file"; launcher.launch("*/*") }
                             )
                         }
                     }
@@ -389,10 +396,10 @@ fun ChatScreen(
                         },
                         modifier = Modifier
                             .clip(CircleShape)
-                            .background(Color(0xFF007AFF))
+                            .background(textColor)
                             .size(48.dp)
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Color.White)
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = bgColor)
                     }
                 }
             }

@@ -13,6 +13,7 @@ import com.google.firebase.database.*
 object PushNotificationManager {
     private const val CHANNEL_ID = "chat_messages_channel"
     private var isInitialized = false
+    var isAppInForeground = false
     private var lastObservedTimestamps = mutableMapOf<String, Long>()
 
     fun init(context: Context) {
@@ -37,11 +38,17 @@ object PushNotificationManager {
 
                     // If we already know about this chat and the timestamp is newer, it's a new message
                     if (previousTimestamp != null && timestamp > previousTimestamp) {
-                        if (lastMessage.isNotBlank() && lastSenderId != currentUser.uid) {
-                            // Let's resolve peer name
-                            database.getReference("users").child(peerId).child("name").get().addOnSuccessListener { nameSnap ->
-                                val name = nameSnap.getValue(String::class.java) ?: "User"
-                                showNotification(context, peerId, name, "Новое сообщение")
+                        if (lastMessage.isNotBlank() && lastSenderId != currentUser.uid && !isAppInForeground) {
+                            database.getReference("users").child(peerId).get().addOnSuccessListener { userSnap ->
+                                val name = userSnap.child("name").getValue(String::class.java) ?: "User"
+                                val avatarUrl = userSnap.child("avatarUrl").getValue(String::class.java) ?: ""
+                                
+                                val chatId = if (currentUser.uid < peerId) currentUser.uid + "_" + peerId else peerId + "_" + currentUser.uid
+                                val decryptedTxt = if (!lastMessage.startsWith("[")) {
+                                    try { com.example.ui.screens.chat.ChatCrypto.decrypt(lastMessage, chatId) } catch (e: Exception) { lastMessage }
+                                } else lastMessage
+
+                                showNotification(context, peerId, name, decryptedTxt, avatarUrl)
                             }
                         }
                     }
@@ -68,10 +75,9 @@ object PushNotificationManager {
         }
     }
 
-    private fun showNotification(context: Context, peerId: String, title: String, messageText: String) {
+    private fun showNotification(context: Context, peerId: String, title: String, messageText: String, avatarUrl: String) {
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            // We could pass an extra to navigate directly to the chat
             putExtra("chatId", peerId)
         }
         
@@ -79,15 +85,49 @@ object PushNotificationManager {
             context, peerId.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        val replyLabel = "Ответить"
+        val remoteInput = androidx.core.app.RemoteInput.Builder("key_text_reply").setLabel(replyLabel).build()
+        val replyIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+            action = "ACTION_REPLY"
+            putExtra("peerId", peerId)
+        }
+        val replyPendingIntent = PendingIntent.getBroadcast(context, peerId.hashCode(), replyIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
+        val replyAction = NotificationCompat.Action.Builder(android.R.drawable.ic_menu_send, replyLabel, replyPendingIntent)
+            .addRemoteInput(remoteInput)
+            .build()
+            
+        val readIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+            action = "ACTION_MARK_READ"
+            putExtra("peerId", peerId)
+        }
+        val readPendingIntent = PendingIntent.getBroadcast(context, peerId.hashCode() + 1, readIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val readAction = NotificationCompat.Action.Builder(android.R.drawable.ic_menu_view, "Прочитать", readPendingIntent).build()
+
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle(title)
             .setContentText(messageText)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
+            .addAction(replyAction)
+            .addAction(readAction)
             .setAutoCancel(true)
 
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(peerId.hashCode(), builder.build())
+        
+        if (avatarUrl.isNotBlank()) {
+            val loader = coil.ImageLoader(context)
+            val request = coil.request.ImageRequest.Builder(context)
+                .data(avatarUrl)
+                .target { result ->
+                    val bmp = (result as? android.graphics.drawable.BitmapDrawable)?.bitmap
+                    if (bmp != null) builder.setLargeIcon(bmp)
+                    notificationManager.notify(peerId.hashCode(), builder.build())
+                }
+                .build()
+            loader.enqueue(request)
+        } else {
+            notificationManager.notify(peerId.hashCode(), builder.build())
+        }
     }
 }
