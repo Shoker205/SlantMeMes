@@ -153,7 +153,8 @@ fun ChatScreen(
         
         val chatMeta = mapOf(
             "lastMessage" to (if (type == "text") encryptedText else "[$type]"),
-            "timestamp" to System.currentTimeMillis()
+            "timestamp" to System.currentTimeMillis(),
+            "lastSenderId" to currentUser.uid
         )
         database.getReference("user_chats").child(currentUser.uid).child(recipientId).setValue(chatMeta)
         database.getReference("user_chats").child(recipientId).child(currentUser.uid).setValue(chatMeta)

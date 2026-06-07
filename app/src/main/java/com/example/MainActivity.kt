@@ -1,5 +1,6 @@
 package com.example
 
+import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -12,22 +13,34 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import com.example.ui.theme.MyApplicationTheme
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
+import androidx.compose.runtime.LaunchedEffect
 
 class MainActivity : ComponentActivity() {
+  @OptIn(ExperimentalPermissionsApi::class)
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     AppPreferences.init(applicationContext)
+    
     // Временно отключен FLAG_SECURE для работы потокового эмулятора AI Studio.
-    // Этот флаг блокировал трансляцию экрана и показывал черный экран.
-    // Раскомментируйте на реальном устройстве (Anti-Forensics):
-    /*
-    window.setFlags(
-        WindowManager.LayoutParams.FLAG_SECURE,
-        WindowManager.LayoutParams.FLAG_SECURE
-    )
-    */
     enableEdgeToEdge()
     setContent {
+      // Request notification permission on Android 13+
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+          val permissionState = rememberPermissionState(android.Manifest.permission.POST_NOTIFICATIONS)
+          LaunchedEffect(Unit) {
+              if (!permissionState.status.isGranted) {
+                  permissionState.launchPermissionRequest()
+              }
+          }
+      }
+
+      LaunchedEffect(Unit) {
+          PushNotificationManager.init(applicationContext)
+      }
+
       val isDarkTheme by AppPreferences.isDarkTheme.collectAsState()
       MyApplicationTheme(darkTheme = isDarkTheme) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {

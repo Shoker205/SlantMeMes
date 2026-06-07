@@ -25,7 +25,9 @@ fun MainAppNavigation() {
         composable("chat_list") {
             ChatListScreen(
                 onOpenDrawer = { /* TODO */ },
-                onChatClick = { /* TODO */ },
+                onChatClick = { userId -> 
+                    navController.navigate("chat/$userId")
+                },
                 onLogout = {
                     FirebaseAuth.getInstance().signOut()
                     navController.navigate("auth") {
@@ -65,7 +67,9 @@ fun MainAppNavigation() {
                     navController.popBackStack()
                 },
                 onChatClick = { uid ->
-                    navController.navigate("chat/$uid")
+                    navController.navigate("chat/$uid") {
+                        popUpTo("other_profile/{userId}") { inclusive = true }
+                    }
                 }
             )
         }

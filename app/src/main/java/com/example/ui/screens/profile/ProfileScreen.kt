@@ -286,11 +286,105 @@ fun ProfileScreen(
                     // Edit Mode: compact input fields with scrollability
                     Spacer(Modifier.height(16.dp))
                     
-                    ProfileEditField(s("Имя", "Name"), name, textColor, dimTextColor, surfaceColor, borderColor) { name = it }
-                    ProfileEditField(s("Юзернейм", "Username"), username, textColor, dimTextColor, surfaceColor, borderColor) { username = it }
-                    ProfileEditField(s("Обо мне", "About me"), bio, textColor, dimTextColor, surfaceColor, borderColor) { bio = it }
-                    ProfileEditField(s("Пол", "Gender"), gender, textColor, dimTextColor, surfaceColor, borderColor) { gender = it }
-                    ProfileEditField(s("Дата рождения", "Birth date"), birthday, textColor, dimTextColor, surfaceColor, borderColor) { birthday = it }
+                    ProfileEditField(label = s("Имя", "Name"), value = name, textColor = textColor, dimTextColor = dimTextColor, surfaceColor = surfaceColor, borderColor = borderColor) { name = it }
+                    ProfileEditField(label = s("Юзернейм", "Username"), value = username, textColor = textColor, dimTextColor = dimTextColor, surfaceColor = surfaceColor, borderColor = borderColor) { username = it }
+                    ProfileEditField(label = s("Обо мне", "About me"), value = bio, textColor = textColor, dimTextColor = dimTextColor, surfaceColor = surfaceColor, borderColor = borderColor) { bio = it }
+                    
+                    var showGenderDropdown by remember { mutableStateOf(false) }
+                    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
+                        Text(s("Пол", "Gender"), color = dimTextColor, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 6.dp, start = 4.dp))
+                        Box {
+                            OutlinedTextField(
+                                value = gender,
+                                onValueChange = {},
+                                readOnly = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    unfocusedBorderColor = borderColor,
+                                    focusedBorderColor = textColor,
+                                    unfocusedTextColor = textColor,
+                                    focusedTextColor = textColor,
+                                    focusedContainerColor = surfaceColor,
+                                    unfocusedContainerColor = surfaceColor
+                                )
+                            )
+                            Box(modifier = Modifier.matchParentSize().clickable { showGenderDropdown = true })
+                            DropdownMenu(
+                                expanded = showGenderDropdown,
+                                onDismissRequest = { showGenderDropdown = false },
+                                containerColor = surfaceColor
+                            ) {
+                                DropdownMenuItem(text = { Text(s("МУЖСКОЙ", "MALE"), color = textColor) }, onClick = { gender = s("Мужской", "Male"); showGenderDropdown = false })
+                                DropdownMenuItem(text = { Text(s("ЖЕНСКИЙ", "FEMALE"), color = textColor) }, onClick = { gender = s("Женский", "Female"); showGenderDropdown = false })
+                                DropdownMenuItem(text = { Text(s("ДРУГОЕ", "OTHER"), color = textColor) }, onClick = { gender = s("Другое", "Other"); showGenderDropdown = false })
+                            }
+                        }
+                    }
+
+                    var showDatePicker by remember { mutableStateOf(false) }
+                    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
+                        Text(s("Дата рождения", "Birth date"), color = dimTextColor, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 6.dp, start = 4.dp))
+                        Box {
+                            OutlinedTextField(
+                                value = birthday,
+                                onValueChange = {},
+                                readOnly = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    unfocusedBorderColor = borderColor,
+                                    focusedBorderColor = textColor,
+                                    unfocusedTextColor = textColor,
+                                    focusedTextColor = textColor,
+                                    focusedContainerColor = surfaceColor,
+                                    unfocusedContainerColor = surfaceColor
+                                )
+                            )
+                            Box(modifier = Modifier.matchParentSize().clickable { showDatePicker = true })
+                        }
+                    }
+                    
+                    if (showDatePicker) {
+                        val datePickerState = rememberDatePickerState()
+                        DatePickerDialog(
+                            onDismissRequest = { showDatePicker = false },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    datePickerState.selectedDateMillis?.let { millis ->
+                                        val format = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+                                        birthday = format.format(java.util.Date(millis))
+                                    }
+                                    showDatePicker = false
+                                }) { Text(s("ОК", "OK"), color = textColor) }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showDatePicker = false }) { Text(s("ОТМЕНА", "CANCEL"), color = dimTextColor) }
+                            },
+                            colors = DatePickerDefaults.colors(
+                                containerColor = surfaceColor,
+                            )
+                        ) {
+                            DatePicker(
+                                state = datePickerState,
+                                colors = DatePickerDefaults.colors(
+                                    titleContentColor = textColor,
+                                    headlineContentColor = textColor,
+                                    weekdayContentColor = textColor,
+                                    subheadContentColor = textColor,
+                                    yearContentColor = textColor,
+                                    currentYearContentColor = textColor,
+                                    selectedYearContentColor = surfaceColor,
+                                    selectedYearContainerColor = textColor,
+                                    dayContentColor = textColor,
+                                    selectedDayContentColor = surfaceColor,
+                                    selectedDayContainerColor = textColor,
+                                    todayContentColor = textColor,
+                                    todayDateBorderColor = textColor
+                                )
+                            )
+                        }
+                    }
                 }
 
                 Spacer(Modifier.height(40.dp))
