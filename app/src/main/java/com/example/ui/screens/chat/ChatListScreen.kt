@@ -54,6 +54,9 @@ fun ChatListScreen(
     var profileUsername by remember { mutableStateOf("@username") }
     var profileAvatarUrl by remember { mutableStateOf("") }
     
+    val selectedLanguage by com.example.AppPreferences.language.collectAsState()
+    val s: (String, String) -> String = { ru, en -> if (selectedLanguage == "English") en else ru }
+
     var showLogoutDialog by remember { mutableStateOf(false) }
 
     // Search and contacts state
@@ -190,16 +193,16 @@ fun ChatListScreen(
                     }
                     androidx.compose.material3.HorizontalDivider(color = LightSurface, thickness = 1.dp, modifier = Modifier.padding(bottom = 10.dp))
                     
-                    DrawerMenuItem(icon = Icons.Default.Person, text = "Мой профиль", onClick = { 
+                    DrawerMenuItem(icon = Icons.Default.Person, text = s("Мой профиль", "My profile"), onClick = { 
                         scope.launch { drawerState.close() }
                         onProfileClick() 
                     })
                     androidx.compose.material3.HorizontalDivider(color = LightSurface, thickness = 1.dp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
-                    DrawerMenuItem(icon = Icons.Default.Settings, text = "Настройки", onClick = { 
+                    DrawerMenuItem(icon = Icons.Default.Settings, text = s("Настройки", "Settings"), onClick = { 
                         scope.launch { drawerState.close() }
                         onSettingsClick() 
                     })
-                    DrawerMenuItem(icon = Icons.AutoMirrored.Filled.Logout, text = "Выйти", onClick = { showLogoutDialog = true })
+                    DrawerMenuItem(icon = Icons.AutoMirrored.Filled.Logout, text = s("Выйти", "Logout"), onClick = { showLogoutDialog = true })
                 }
             }
         }
@@ -207,19 +210,19 @@ fun ChatListScreen(
         if (showLogoutDialog) {
             AlertDialog(
                 onDismissRequest = { showLogoutDialog = false },
-                title = { Text("Выход", color = White) },
-                text = { Text("Вы уверены, что хотите выйти из профиля?", color = DimText) },
+                title = { Text(s("Выход", "Logout"), color = White) },
+                text = { Text(s("Вы уверены, что хотите выйти из профиля?", "Are you sure you want to logout?"), color = DimText) },
                 confirmButton = {
                     TextButton(onClick = {
                         showLogoutDialog = false
                         onLogout()
                     }) {
-                        Text("Выйти", color = Color(0xFFE53935))
+                        Text(s("Выйти", "Logout"), color = Color(0xFFE53935))
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showLogoutDialog = false }) {
-                        Text("Отмена", color = DimText)
+                        Text(s("Отмена", "Cancel"), color = DimText)
                     }
                 },
                 containerColor = DarkSurface,

@@ -58,8 +58,9 @@ fun AuthScreen(
     onAuthSuccess: () -> Unit
 ) {
     var currentMode by remember { mutableStateOf(AuthMode.LOGIN) }
-    var isDarkTheme by remember { mutableStateOf(true) }
-    var isEnglish by remember { mutableStateOf(false) }
+    val isDarkTheme by com.example.AppPreferences.isDarkTheme.collectAsState()
+    val globalLanguage by com.example.AppPreferences.language.collectAsState()
+    val isEnglish = globalLanguage == "English"
 
     fun s(ru: String, en: String): String = if (isEnglish) en else ru
 
@@ -154,10 +155,14 @@ fun AuthScreen(
                 .statusBarsPadding(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            IconButton(onClick = { isEnglish = !isEnglish }) {
+            IconButton(onClick = { 
+                com.example.AppPreferences.setLanguage(if (isEnglish) "Русский" else "English")
+            }) {
                 Icon(Icons.Default.Language, contentDescription = "Language", tint = dimTextColor)
             }
-            IconButton(onClick = { isDarkTheme = !isDarkTheme }) {
+            IconButton(onClick = { 
+                com.example.AppPreferences.setDarkTheme(!isDarkTheme) 
+            }) {
                 Icon(
                     if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode, 
                     contentDescription = "Theme", 

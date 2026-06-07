@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -22,23 +23,31 @@ import com.example.ui.theme.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
-    var isDarkTheme by remember { mutableStateOf(true) }
-    var selectedLanguage by remember { mutableStateOf("Русский") }
+    val isDarkTheme by com.example.AppPreferences.isDarkTheme.collectAsState()
+    val selectedLanguage by com.example.AppPreferences.language.collectAsState()
     var showAboutDialog by remember { mutableStateOf(false) }
-    
+
+    val bgColor = if (isDarkTheme) Black else Color(0xFFF5F5F7)
+    val surfaceColor = if (isDarkTheme) DarkSurface else White
+    val borderColor = if (isDarkTheme) LightSurface else Color(0xFFE0E0E0)
+    val textColor = if (isDarkTheme) White else Black
+    val dimTextColor = if (isDarkTheme) DimText else Color(0xFF666666)
+
+    val s: (String, String) -> String = { ru, en -> if (selectedLanguage == "English") en else ru }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Настройки", color = White, fontWeight = FontWeight.Bold) },
+                title = { Text(s("Настройки", "Settings"), color = textColor, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад", tint = White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = s("Назад", "Back"), tint = textColor)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Black)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = bgColor)
             )
         },
-        containerColor = Black
+        containerColor = bgColor
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -55,26 +64,26 @@ fun SettingsScreen(onBack: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column {
-                    Text("Темная тема", color = White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    Text("Использовать темную тему оформления", color = DimText, fontSize = 12.sp)
+                    Text(s("Темная тема", "Dark Theme"), color = textColor, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text(s("Использовать темную тему оформления", "Use dark visual theme"), color = dimTextColor, fontSize = 12.sp)
                 }
                 Switch(
                     checked = isDarkTheme,
-                    onCheckedChange = { isDarkTheme = it },
+                    onCheckedChange = { com.example.AppPreferences.setDarkTheme(it) },
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = Black,
-                        checkedTrackColor = White,
-                        uncheckedThumbColor = DimText,
-                        uncheckedTrackColor = DarkSurface
+                        checkedThumbColor = bgColor,
+                        checkedTrackColor = textColor,
+                        uncheckedThumbColor = dimTextColor,
+                        uncheckedTrackColor = surfaceColor
                     )
                 )
             }
             
-            HorizontalDivider(color = LightSurface, thickness = 1.dp, modifier = Modifier.padding(vertical = 8.dp))
+            HorizontalDivider(color = borderColor, thickness = 1.dp, modifier = Modifier.padding(vertical = 8.dp))
             
             // Language selector
             Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
-                Text("Язык", color = White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text(s("Язык", "Language"), color = textColor, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
                 
                 var expanded by remember { mutableStateOf(false) }
@@ -88,33 +97,35 @@ fun SettingsScreen(onBack: () -> Unit) {
                         readOnly = true,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = DimText,
-                            unfocusedBorderColor = LightSurface,
-                            focusedTextColor = White,
-                            unfocusedTextColor = White
+                            focusedBorderColor = dimTextColor,
+                            unfocusedBorderColor = borderColor,
+                            focusedTextColor = textColor,
+                            unfocusedTextColor = textColor,
+                            focusedContainerColor = bgColor,
+                            unfocusedContainerColor = bgColor
                         ),
                         modifier = Modifier.menuAnchor()
                     )
                     ExposedDropdownMenu(
                         expanded = expanded,
                         onDismissRequest = { expanded = false },
-                        containerColor = DarkSurface
+                        containerColor = surfaceColor
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Русский", color = White) },
-                            onClick = { selectedLanguage = "Русский"; expanded = false }
+                            text = { Text("Русский", color = textColor) },
+                            onClick = { com.example.AppPreferences.setLanguage("Русский"); expanded = false }
                         )
                         DropdownMenuItem(
-                            text = { Text("English", color = White) },
-                            onClick = { selectedLanguage = "English"; expanded = false }
+                            text = { Text("English", color = textColor) },
+                            onClick = { com.example.AppPreferences.setLanguage("English"); expanded = false }
                         )
                     }
                 }
                 Spacer(Modifier.height(4.dp))
-                Text("Изменение языка приложения", color = DimText, fontSize = 12.sp)
+                Text(s("Изменение языка приложения", "Change application language"), color = dimTextColor, fontSize = 12.sp)
             }
             
-            HorizontalDivider(color = LightSurface, thickness = 1.dp, modifier = Modifier.padding(vertical = 8.dp))
+            HorizontalDivider(color = borderColor, thickness = 1.dp, modifier = Modifier.padding(vertical = 8.dp))
             
             // About App
             Row(
@@ -126,10 +137,10 @@ fun SettingsScreen(onBack: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column {
-                    Text("О приложении", color = White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    Text("Версия, разработчик и другая информация", color = DimText, fontSize = 12.sp)
+                    Text(s("О приложении", "About Application"), color = textColor, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text(s("Версия, разработчик и другая информация", "Version, developer and other info"), color = dimTextColor, fontSize = 12.sp)
                 }
-                Icon(Icons.Default.Info, contentDescription = "Инфо", tint = DimText)
+                Icon(Icons.Default.Info, contentDescription = "Инфо", tint = dimTextColor)
             }
         }
     }
@@ -138,12 +149,12 @@ fun SettingsScreen(onBack: () -> Unit) {
         val uriHandler = LocalUriHandler.current
         AlertDialog(
             onDismissRequest = { showAboutDialog = false },
-            containerColor = DarkSurface,
-            titleContentColor = White,
-            textContentColor = White,
+            containerColor = surfaceColor,
+            titleContentColor = textColor,
+            textContentColor = textColor,
             title = {
                 Text(
-                    text = "О приложении",
+                    text = s("О приложении", "About Application"),
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
                 )
@@ -160,16 +171,16 @@ fun SettingsScreen(onBack: () -> Unit) {
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "Slant 2",
+                        text = "Slant",
                         fontWeight = FontWeight.Bold,
                         fontSize = 20.sp,
-                        color = White
+                        color = textColor
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Версия: 1.0.0",
+                        text = s("Версия: 1.0.0", "Version: 1.0.0"),
                         fontSize = 14.sp,
-                        color = DimText
+                        color = dimTextColor
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Row(
@@ -179,28 +190,28 @@ fun SettingsScreen(onBack: () -> Unit) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Разработчик: ",
+                            text = s("Разработчик: ", "Developer: "),
                             fontSize = 14.sp,
-                            color = DimText
+                            color = dimTextColor
                         )
                         Text(
                             text = "SlantTech",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
-                            color = White
+                            color = textColor
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "© 2026",
                         fontSize = 14.sp,
-                        color = DimText
+                        color = dimTextColor
                     )
                 }
             },
             confirmButton = {
                 TextButton(onClick = { showAboutDialog = false }) {
-                    Text("Закрыть", color = White)
+                    Text(s("Закрыть", "Close"), color = textColor)
                 }
             }
         )

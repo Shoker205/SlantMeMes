@@ -8,12 +8,15 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import com.example.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    AppPreferences.init(applicationContext)
     // Временно отключен FLAG_SECURE для работы потокового эмулятора AI Studio.
     // Этот флаг блокировал трансляцию экрана и показывал черный экран.
     // Раскомментируйте на реальном устройстве (Anti-Forensics):
@@ -25,7 +28,8 @@ class MainActivity : ComponentActivity() {
     */
     enableEdgeToEdge()
     setContent {
-      MyApplicationTheme {
+      val isDarkTheme by AppPreferences.isDarkTheme.collectAsState()
+      MyApplicationTheme(darkTheme = isDarkTheme) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             MainAppNavigation()
         }
