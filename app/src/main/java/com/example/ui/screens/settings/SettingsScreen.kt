@@ -154,7 +154,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Image(
-                        painter = painterResource(id = R.mipmap.ic_launcher),
+                        painter = painterResource(id = R.drawable.ic_launcher_foreground),
                         contentDescription = "Иконка приложения",
                         modifier = Modifier.size(72.dp)
                     )
