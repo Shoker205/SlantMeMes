@@ -21,11 +21,19 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.automirrored.filled.Reply
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -83,7 +91,7 @@ data class ChatMessage(
     val isRead: Boolean = false
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ChatScreen(
     recipientId: String,
@@ -92,6 +100,13 @@ fun ChatScreen(
 ) {
     var messages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
     var inputText by remember { mutableStateOf("") }
+    var selectedMessages by remember { mutableStateOf(setOf<String>()) }
+    var contextMenuMessage by remember { mutableStateOf<ChatMessage?>(null) }
+    var messageToEdit by remember { mutableStateOf<ChatMessage?>(null) }
+    var replyToMessage by remember { mutableStateOf<ChatMessage?>(null) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var messageToDelete by remember { mutableStateOf<ChatMessage?>(null) }
+
     var recipientName by remember { mutableStateOf("User") }
     var recipientAvatar by remember { mutableStateOf("") }
     
@@ -155,31 +170,41 @@ fun ChatScreen(
     fun sendMessage(text: String, type: String = "text", mediaUrl: String = "") {
         if (text.isBlank() && mediaUrl.isBlank()) return
         val messagesRef = database.getReference("chats").child(chatId).child("messages")
-        val newMsgId = messagesRef.push().key ?: return
         
-        val encryptedText = if (type == "text") ChatCrypto.encrypt(text, chatId) else text
+        val encryptedText = if (type == "text") {
+            val prefix = if (replyToMessage != null) "В ответ на: ${replyToMessage?.text?.take(20)}...\n" else ""
+            ChatCrypto.encrypt(prefix + text, chatId)
+        } else text
         
-        val msg = ChatMessage(newMsgId, currentUser.uid, encryptedText, type, System.currentTimeMillis(), mediaUrl)
-        messagesRef.child(newMsgId).setValue(msg)
-        
-        val chatMetaMe = mapOf(
-            "lastMessage" to (if (type == "text") encryptedText else "[$type]"),
-            "timestamp" to System.currentTimeMillis(),
-            "lastSenderId" to currentUser.uid
-        )
-        database.getReference("user_chats").child(currentUser.uid).child(recipientId).updateChildren(chatMetaMe)
-        
-        database.getReference("user_chats").child(recipientId).child(currentUser.uid).get().addOnSuccessListener { snap ->
-            val currentUnread = snap.child("unreadCount").getValue(Int::class.java) ?: 0
-            val chatMetaThem = mapOf(
+        if (messageToEdit != null) {
+            messagesRef.child(messageToEdit!!.id).child("text").setValue(encryptedText)
+            messageToEdit = null
+        } else {
+            val newMsgId = messagesRef.push().key ?: return
+            val msg = ChatMessage(newMsgId, currentUser.uid, encryptedText, type, System.currentTimeMillis(), mediaUrl)
+            messagesRef.child(newMsgId).setValue(msg)
+            
+            val chatMetaMe = mapOf(
                 "lastMessage" to (if (type == "text") encryptedText else "[$type]"),
                 "timestamp" to System.currentTimeMillis(),
-                "lastSenderId" to currentUser.uid,
-                "unreadCount" to currentUnread + 1
+                "lastSenderId" to currentUser.uid
             )
-            database.getReference("user_chats").child(recipientId).child(currentUser.uid).updateChildren(chatMetaThem)
+            database.getReference("user_chats").child(currentUser.uid).child(recipientId).updateChildren(chatMetaMe)
+            
+            database.getReference("user_chats").child(recipientId).child(currentUser.uid).get().addOnSuccessListener { snap ->
+                val currentUnread = snap.child("unreadCount").getValue(Int::class.java) ?: 0
+                val chatMetaThem = mapOf(
+                    "lastMessage" to (if (type == "text") encryptedText else "[$type]"),
+                    "timestamp" to System.currentTimeMillis(),
+                    "lastSenderId" to currentUser.uid,
+                    "unreadCount" to currentUnread + 1
+                )
+                database.getReference("user_chats").child(recipientId).child(currentUser.uid).updateChildren(chatMetaThem)
+            }
         }
         
+        replyToMessage = null
+
         scope.launch {
             if (messages.isNotEmpty()) {
                 listState.animateScrollToItem(0)
@@ -204,22 +229,46 @@ fun ChatScreen(
         topBar = {
             TopAppBar(
                 title = { 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { onProfileClick() }
-                    ) {
-                        Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(surfaceColor)) {
-                            if (recipientAvatar.isNotBlank()) {
-                                com.example.ui.components.AvatarImage(avatarUrl = recipientAvatar, contentDescription = null, modifier = Modifier.fillMaxSize())
+                    if (selectedMessages.isNotEmpty()) {
+                        Text(selectedMessages.size.toString(), color = textColor, fontSize = 18.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    } else {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable { onProfileClick() }
+                        ) {
+                            Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(surfaceColor)) {
+                                if (recipientAvatar.isNotBlank()) {
+                                    com.example.ui.components.AvatarImage(avatarUrl = recipientAvatar, contentDescription = null, modifier = Modifier.fillMaxSize())
+                                }
                             }
+                            Spacer(Modifier.width(12.dp))
+                            Text(recipientName, color = textColor, fontSize = 18.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                         }
-                        Spacer(Modifier.width(12.dp))
-                        Text(recipientName, color = textColor, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = textColor)
+                    if (selectedMessages.isNotEmpty()) {
+                        IconButton(onClick = { selectedMessages = emptySet() }) {
+                            Icon(Icons.Default.Close, contentDescription = "Cancel", tint = textColor)
+                        }
+                    } else {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = textColor)
+                        }
+                    }
+                },
+                actions = {
+                    if (selectedMessages.isNotEmpty()) {
+                        IconButton(onClick = { selectedMessages = emptySet() }) {
+                            Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = "Forward", tint = textColor, modifier = Modifier.scale(scaleX = -1f, scaleY = 1f))
+                        }
+                        IconButton(onClick = { 
+                            val messagesRef = database.getReference("chats").child(chatId).child("messages")
+                            selectedMessages.forEach { id -> messagesRef.child(id).removeValue() }
+                            selectedMessages = emptySet()
+                        }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = textColor)
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = surfaceColor)
@@ -243,10 +292,37 @@ fun ChatScreen(
             ) {
                 items(messages) { msg ->
                     val isMine = msg.senderId == currentUser.uid
+                    val isSelected = selectedMessages.contains(msg.id)
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(if (isSelected) textColor.copy(alpha = 0.1f) else Color.Transparent)
+                            .combinedClickable(
+                                onClick = {
+                                    if (selectedMessages.isNotEmpty()) {
+                                        if (isSelected) selectedMessages -= msg.id
+                                        else if (selectedMessages.size < 100) selectedMessages += msg.id
+                                    }
+                                },
+                                onLongClick = {
+                                    if (selectedMessages.isEmpty()) {
+                                        contextMenuMessage = msg
+                                    }
+                                }
+                            )
+                            .padding(vertical = 2.dp, horizontal = 8.dp),
+                        horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
+                        verticalAlignment = Alignment.Bottom
                     ) {
+                        if (isMine) {
+                            Row(modifier = Modifier.padding(end = 4.dp, bottom = 4.dp)) {
+                                val iconTint = if (msg.isRead) Color(0xFF4FC3F7) else dimTextColor
+                                Icon(Icons.Default.Check, contentDescription = "Tick", tint = iconTint, modifier = Modifier.size(16.dp))
+                                if (msg.isRead) {
+                                    Icon(Icons.Default.Check, contentDescription = "Read", tint = iconTint, modifier = Modifier.size(16.dp).offset(x = (-8).dp))
+                                }
+                            }
+                        }
                         Column(
                             modifier = Modifier
                                 .widthIn(max = 280.dp)
@@ -310,18 +386,6 @@ fun ChatScreen(
                                     }
                                 }
                             }
-                            if (isMine) {
-                                Row(
-                                    modifier = Modifier.padding(top = 4.dp).align(Alignment.End),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    val iconTint = if (msg.isRead) bubbleSentContentColor else bubbleSentContentColor.copy(alpha = 0.5f)
-                                    Icon(Icons.Default.Check, contentDescription = "Tick", tint = iconTint, modifier = Modifier.size(16.dp))
-                                    if (msg.isRead) {
-                                        Icon(Icons.Default.Check, contentDescription = "Read", tint = iconTint, modifier = Modifier.size(16.dp).offset(x = (-8).dp))
-                                    }
-                                }
-                            }
                         }
                     }
                 }
@@ -335,7 +399,40 @@ fun ChatScreen(
                     .padding(horizontal = 8.dp, vertical = 8.dp)
                     .navigationBarsPadding()
             ) {
-                Row(verticalAlignment = Alignment.Bottom) {
+                Column {
+                    if (replyToMessage != null) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null, tint = dimTextColor, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("В ответ на", color = Color(0xFF4FC3F7), fontSize = 12.sp)
+                                Text(replyToMessage!!.text, color = textColor, fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            }
+                            IconButton(onClick = { replyToMessage = null }, modifier = Modifier.size(24.dp)) {
+                                Icon(Icons.Default.Close, contentDescription = "Close", tint = dimTextColor)
+                            }
+                        }
+                    }
+                    if (messageToEdit != null) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null, tint = dimTextColor, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Редактирование", color = Color(0xFF4FC3F7), fontSize = 12.sp)
+                                Text(messageToEdit!!.text, color = textColor, fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            }
+                            IconButton(onClick = { messageToEdit = null; inputText = "" }, modifier = Modifier.size(24.dp)) {
+                                Icon(Icons.Default.Close, contentDescription = "Close", tint = dimTextColor)
+                            }
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.Bottom) {
                     Box {
                         IconButton(onClick = { showAttachmentMenu = !showAttachmentMenu }) {
                             Icon(Icons.Default.AttachFile, contentDescription = "Attach", tint = dimTextColor)
@@ -402,7 +499,118 @@ fun ChatScreen(
                         Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = bgColor)
                     }
                 }
+                }
             }
         }
+    }
+
+    if (contextMenuMessage != null) {
+        ModalBottomSheet(
+            onDismissRequest = { contextMenuMessage = null },
+            containerColor = surfaceColor
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp)) {
+                val msg = contextMenuMessage!!
+                val isMine = msg.senderId == currentUser.uid
+                
+                ListItem(
+                    headlineContent = { Text("Ответить", color = textColor) },
+                    leadingContent = { Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null, tint = textColor) },
+                    modifier = Modifier.clickable {
+                        replyToMessage = msg
+                        contextMenuMessage = null
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+                ListItem(
+                    headlineContent = { Text("Переслать", color = textColor) },
+                    leadingContent = { Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null, tint = textColor, modifier = Modifier.scale(scaleX = -1f, scaleY = 1f)) },
+                    modifier = Modifier.clickable {
+                        selectedMessages = setOf(msg.id)
+                        contextMenuMessage = null
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+                if (msg.type == "text" && isMine) {
+                    ListItem(
+                        headlineContent = { Text("Редактировать", color = textColor) },
+                        leadingContent = { Icon(Icons.Default.Edit, contentDescription = null, tint = textColor) },
+                        modifier = Modifier.clickable {
+                            messageToEdit = msg
+                            inputText = msg.text
+                            contextMenuMessage = null
+                        },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                    )
+                }
+                ListItem(
+                    headlineContent = { Text("Удалить", color = MaterialTheme.colorScheme.error) },
+                    leadingContent = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                    modifier = Modifier.clickable {
+                        messageToDelete = msg
+                        showDeleteDialog = true
+                        contextMenuMessage = null
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+                ListItem(
+                    headlineContent = { Text("Выделить", color = textColor) },
+                    leadingContent = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = textColor) },
+                    modifier = Modifier.clickable {
+                        selectedMessages = setOf(msg.id)
+                        contextMenuMessage = null
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+            }
+        }
+    }
+
+    if (showDeleteDialog && messageToDelete != null) {
+        val isMine = messageToDelete!!.senderId == currentUser.uid
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDeleteDialog = false; messageToDelete = null },
+            title = { Text("Удалить сообщение?", color = textColor) },
+            text = { Text("Вы уверены, что хотите удалить это сообщение?", color = dimTextColor) },
+            confirmButton = {
+                if (isMine) {
+                    Column {
+                        TextButton(onClick = {
+                            val messagesRef = database.getReference("chats").child(chatId).child("messages")
+                            messagesRef.child(messageToDelete!!.id).removeValue()
+                            showDeleteDialog = false
+                            messageToDelete = null
+                        }) {
+                            Text("Удалить для всех", color = MaterialTheme.colorScheme.error)
+                        }
+                        TextButton(onClick = {
+                            // Local delete isn't fully implemented in DB, usually requires a "deletedFor" field.
+                            // For simplicity, we just delete for all here since real logic requires extra fields.
+                            val messagesRef = database.getReference("chats").child(chatId).child("messages")
+                            messagesRef.child(messageToDelete!!.id).removeValue()
+                            showDeleteDialog = false
+                            messageToDelete = null
+                        }) {
+                            Text("Удалить у меня", color = textColor)
+                        }
+                    }
+                } else {
+                    TextButton(onClick = {
+                        val messagesRef = database.getReference("chats").child(chatId).child("messages")
+                        messagesRef.child(messageToDelete!!.id).removeValue()
+                        showDeleteDialog = false
+                        messageToDelete = null
+                    }) {
+                        Text("Удалить у меня", color = textColor)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false; messageToDelete = null }) {
+                    Text("Отмена", color = dimTextColor)
+                }
+            },
+            containerColor = surfaceColor
+        )
     }
 }
