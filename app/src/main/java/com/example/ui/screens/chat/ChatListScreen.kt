@@ -183,11 +183,10 @@ fun ChatListScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (profileAvatarUrl.isNotBlank()) {
-                                    coil.compose.AsyncImage(
-                                        model = profileAvatarUrl,
+                                    com.example.ui.components.AvatarImage(
+                                        avatarUrl = profileAvatarUrl,
                                         contentDescription = "Profile",
-                                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)),
-                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp))
                                     )
                                 } else {
                                     Icon(Icons.Default.Person, contentDescription = "Profile", tint = dimTextColor, modifier = Modifier.size(32.dp))
@@ -416,11 +415,10 @@ fun ChatListScreen(
                                                     contentAlignment = Alignment.Center
                                                 ) {
                                                     if (user.avatarUrl.isNotBlank()) {
-                                                        coil.compose.AsyncImage(
-                                                            model = user.avatarUrl,
+                                                        com.example.ui.components.AvatarImage(
+                                                            avatarUrl = user.avatarUrl,
                                                             contentDescription = "Аватар",
-                                                            modifier = Modifier.fillMaxSize(),
-                                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                                            modifier = Modifier.fillMaxSize()
                                                         )
                                                     } else {
                                                         Icon(Icons.Default.Person, contentDescription = null, tint = dimTextColor)
@@ -496,11 +494,10 @@ fun ChatListScreen(
                                                     contentAlignment = Alignment.Center
                                                 ) {
                                                     if (contact.avatarUrl.isNotBlank()) {
-                                                        coil.compose.AsyncImage(
-                                                            model = contact.avatarUrl,
+                                                        com.example.ui.components.AvatarImage(
+                                                            avatarUrl = contact.avatarUrl,
                                                             contentDescription = "Аватар",
-                                                            modifier = Modifier.fillMaxSize(),
-                                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                                            modifier = Modifier.fillMaxSize()
                                                         )
                                                     } else {
                                                         Icon(Icons.Default.Person, contentDescription = null, tint = dimTextColor)

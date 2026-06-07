@@ -218,11 +218,10 @@ fun ProfileScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     if (avatarUrl.isNotBlank()) {
-                        coil.compose.AsyncImage(
-                            model = avatarUrl,
+                        com.example.ui.components.AvatarImage(
+                            avatarUrl = avatarUrl,
                             contentDescription = s("Аватар", "Avatar"),
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                            modifier = Modifier.fillMaxSize()
                         )
                     } else {
                         Icon(Icons.Default.Person, contentDescription = s("Аватар", "Avatar"), tint = dimTextColor, modifier = Modifier.size(54.dp))
