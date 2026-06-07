@@ -63,6 +63,18 @@ fun MainAppNavigation() {
                 userId = userId,
                 onBack = {
                     navController.popBackStack()
+                },
+                onChatClick = { uid ->
+                    navController.navigate("chat/$uid")
+                }
+            )
+        }
+        composable("chat/{userId}") { backStackEntry ->
+            val userId = backStackEntry.arguments?.getString("userId") ?: ""
+            com.example.ui.screens.chat.ChatScreen(
+                recipientId = userId,
+                onBack = {
+                    navController.popBackStack()
                 }
             )
         }

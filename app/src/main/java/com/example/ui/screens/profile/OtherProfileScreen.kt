@@ -31,7 +31,8 @@ import kotlinx.coroutines.tasks.await
 @Composable
 fun OtherProfileScreen(
     userId: String,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onChatClick: (String) -> Unit = {}
 ) {
     var isLoading by remember { mutableStateOf(true) }
     var name by remember { mutableStateOf("") }
@@ -219,15 +220,15 @@ fun OtherProfileScreen(
 
                 Spacer(Modifier.height(12.dp))
 
-                // Disabled "Write" (Написать) button
+                // "Write" (Написать) button
                 Button(
-                    onClick = { },
-                    enabled = false,
+                    onClick = { onChatClick(userId) },
+                    enabled = true,
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        disabledContainerColor = if (isDarkTheme) Color(0xFF1E1E1E) else Color(0xFFE0E0E0),
-                        disabledContentColor = if (isDarkTheme) Color(0xFF555555) else Color(0xFFA0A0A0)
+                        containerColor = if (isDarkTheme) Color(0xFF007AFF) else Color(0xFF007AFF),
+                        contentColor = Color.White
                     )
                 ) {
                     Icon(
@@ -237,7 +238,7 @@ fun OtherProfileScreen(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = s("Написать (Временно недоступно)", "Write (Temporarily unavailable)"),
+                        text = s("Написать", "Write"),
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold
                     )

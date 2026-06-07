@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import androidx.compose.runtime.LaunchedEffect
 
-data class ChatItem(val id: String, val name: String, val username: String, val isOnline: Boolean)
+data class ChatItem(val id: String, val name: String, val username: String, val isOnline: Boolean, val timestamp: Long = 0L)
 data class UserProfile(val uid: String, val name: String, val username: String, val avatarUrl: String)
 
 @Composable
@@ -158,17 +158,47 @@ fun ChatListScreen(
         }
     }
 
-    // No fake chats
-    val chats = emptyList<ChatItem>()
+    // Load real chats
+    var chats by remember { mutableStateOf<List<ChatItem>>(emptyList()) }
 
-    ModalNavigationDrawer(
+    LaunchedEffect(currentUser) {
+        if (currentUser != null) {
+            val userChatsRef = database.getReference("user_chats").child(currentUser.uid)
+            userChatsRef.addValueEventListener(object : com.google.firebase.database.ValueEventListener {
+                override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
+                    scope.launch {
+                        val chatsList = mutableListOf<ChatItem>()
+                        for (child in snapshot.children) {
+                            val peerId = child.key ?: continue
+                            val timestamp = child.child("timestamp").getValue(Long::class.java) ?: 0L
+                            
+                            try {
+                                val userSnap = database.getReference("users").child(peerId).get().await()
+                                val name = userSnap.child("name").getValue(String::class.java) ?: "User"
+                                val username = userSnap.child("username").getValue(String::class.java) ?: ""
+                                // Normally you'd monitor online status from RTDB presence
+                                chatsList.add(ChatItem(peerId, name, username, true, timestamp))
+                            } catch (e: Exception) {
+                                // Ignore
+                            }
+                        }
+                        chatsList.sortByDescending { it.timestamp }
+                        chats = chatsList
+                    }
+                }
+                override fun onCancelled(error: com.google.firebase.database.DatabaseError) {}
+            })
+        }
+    }
+
+        ModalNavigationDrawer(
         drawerState = drawerState,
         scrimColor = Color.Black.copy(alpha = 0.3f),
         drawerContent = {
             ModalDrawerSheet(
                 drawerContainerColor = bgColor,
                 drawerShape = RoundedCornerShape(topEnd = 0.dp, bottomEnd = 0.dp),
-                modifier = Modifier.width(310.dp)
+                modifier = Modifier.widthIn(max = 310.dp)
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     Box(modifier = Modifier
