@@ -57,6 +57,13 @@ fun ChatListScreen(
     val selectedLanguage by com.example.AppPreferences.language.collectAsState()
     val s: (String, String) -> String = { ru, en -> if (selectedLanguage == "English") en else ru }
 
+    val isDarkTheme by com.example.AppPreferences.isDarkTheme.collectAsState()
+    val bgColor = if (isDarkTheme) Black else Color(0xFFF5F5F7)
+    val surfaceColor = if (isDarkTheme) DarkSurface else White
+    val borderColor = if (isDarkTheme) LightSurface else Color(0xFFE0E0E0)
+    val textColor = if (isDarkTheme) White else Black
+    val dimTextColor = if (isDarkTheme) DimText else Color(0xFF666666)
+
     var showLogoutDialog by remember { mutableStateOf(false) }
 
     // Search and contacts state
@@ -156,10 +163,10 @@ fun ChatListScreen(
 
     ModalNavigationDrawer(
         drawerState = drawerState,
-        scrimColor = Color.Black.copy(alpha = 0.7f),
+        scrimColor = Color.Black.copy(alpha = 0.3f),
         drawerContent = {
             ModalDrawerSheet(
-                drawerContainerColor = Black,
+                drawerContainerColor = bgColor,
                 drawerShape = RoundedCornerShape(topEnd = 0.dp, bottomEnd = 0.dp),
                 modifier = Modifier.width(310.dp)
             ) {
@@ -171,8 +178,8 @@ fun ChatListScreen(
                             Box(
                                 modifier = Modifier
                                     .size(64.dp)
-                                    .background(DarkSurface, RoundedCornerShape(20.dp))
-                                    .border(1.dp, LightSurface, RoundedCornerShape(20.dp)),
+                                    .background(surfaceColor, RoundedCornerShape(20.dp))
+                                    .border(1.dp, borderColor, RoundedCornerShape(20.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (profileAvatarUrl.isNotBlank()) {
@@ -183,26 +190,26 @@ fun ChatListScreen(
                                         contentScale = androidx.compose.ui.layout.ContentScale.Crop
                                     )
                                 } else {
-                                    Icon(Icons.Default.Person, contentDescription = "Profile", tint = DimText, modifier = Modifier.size(32.dp))
+                                    Icon(Icons.Default.Person, contentDescription = "Profile", tint = dimTextColor, modifier = Modifier.size(32.dp))
                                 }
                             }
                             Spacer(Modifier.height(15.dp))
-                            Text(profileName, color = White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                            Text(profileUsername, color = DimText, fontSize = 12.sp)
+                            Text(profileName, color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                            Text(profileUsername, color = dimTextColor, fontSize = 12.sp)
                         }
                     }
-                    androidx.compose.material3.HorizontalDivider(color = LightSurface, thickness = 1.dp, modifier = Modifier.padding(bottom = 10.dp))
+                    androidx.compose.material3.HorizontalDivider(color = borderColor, thickness = 1.dp, modifier = Modifier.padding(bottom = 10.dp))
                     
-                    DrawerMenuItem(icon = Icons.Default.Person, text = s("Мой профиль", "My profile"), onClick = { 
+                    DrawerMenuItem(icon = Icons.Default.Person, text = s("Мой профиль", "My profile"), textColor = textColor) { 
                         scope.launch { drawerState.close() }
                         onProfileClick() 
-                    })
-                    androidx.compose.material3.HorizontalDivider(color = LightSurface, thickness = 1.dp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
-                    DrawerMenuItem(icon = Icons.Default.Settings, text = s("Настройки", "Settings"), onClick = { 
+                    }
+                    androidx.compose.material3.HorizontalDivider(color = borderColor, thickness = 1.dp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+                    DrawerMenuItem(icon = Icons.Default.Settings, text = s("Настройки", "Settings"), textColor = textColor) { 
                         scope.launch { drawerState.close() }
                         onSettingsClick() 
-                    })
-                    DrawerMenuItem(icon = Icons.AutoMirrored.Filled.Logout, text = s("Выйти", "Logout"), onClick = { showLogoutDialog = true })
+                    }
+                    DrawerMenuItem(icon = Icons.AutoMirrored.Filled.Logout, text = s("Выйти", "Logout"), textColor = textColor) { showLogoutDialog = true }
                 }
             }
         }
@@ -210,8 +217,8 @@ fun ChatListScreen(
         if (showLogoutDialog) {
             AlertDialog(
                 onDismissRequest = { showLogoutDialog = false },
-                title = { Text(s("Выход", "Logout"), color = White) },
-                text = { Text(s("Вы уверены, что хотите выйти из профиля?", "Are you sure you want to logout?"), color = DimText) },
+                title = { Text(s("Выход", "Logout"), color = textColor) },
+                text = { Text(s("Вы уверены, что хотите выйти из профиля?", "Are you sure you want to logout?"), color = dimTextColor) },
                 confirmButton = {
                     TextButton(onClick = {
                         showLogoutDialog = false
@@ -222,12 +229,12 @@ fun ChatListScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { showLogoutDialog = false }) {
-                        Text(s("Отмена", "Cancel"), color = DimText)
+                        Text(s("Отмена", "Cancel"), color = dimTextColor)
                     }
                 },
-                containerColor = DarkSurface,
-                titleContentColor = White,
-                textContentColor = DimText
+                containerColor = surfaceColor,
+                titleContentColor = textColor,
+                textContentColor = dimTextColor
             )
         }
 
@@ -242,17 +249,17 @@ fun ChatListScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                        Icon(imageVector = Icons.Default.Menu, contentDescription = "Menu", tint = White)
+                        Icon(imageVector = Icons.Default.Menu, contentDescription = "Menu", tint = textColor)
                     }
-                    Text("SLANT", color = White, fontWeight = FontWeight.Black, letterSpacing = 3.sp)
+                    Text("SLANT", color = textColor, fontWeight = FontWeight.Black, letterSpacing = 3.sp)
                     IconButton(onClick = { 
                         selectedDockTab = 1
                     }) {
-                        Icon(imageVector = Icons.Default.Search, contentDescription = "Search", tint = White)
+                        Icon(imageVector = Icons.Default.Search, contentDescription = "Search", tint = textColor)
                     }
                 }
             },
-            containerColor = Black
+            containerColor = bgColor
         ) { innerPadding ->
             Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
                 
@@ -269,21 +276,21 @@ fun ChatListScreen(
                                 Icon(
                                     imageVector = Icons.Default.Chat,
                                     contentDescription = null,
-                                    tint = DimText,
+                                    tint = dimTextColor,
                                     modifier = Modifier.size(64.dp)
                                 )
                                 Spacer(Modifier.height(16.dp))
                                 Text(
-                                    "Вы ещё никому не писали.",
-                                    color = White,
+                                    s("Вы ещё никому не писали.", "You haven't messaged anyone yet."),
+                                    color = textColor,
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     textAlign = TextAlign.Center
                                 )
                                 Spacer(Modifier.height(8.dp))
                                 Text(
-                                    "Перейдите во вкладку Контакты (вторая иконка) или воспользуйтесь поиском, чтобы найти собеседника.",
-                                    color = DimText,
+                                    s("Перейдите во вкладку Контакты (вторая иконка) или воспользуйтесь поиском, чтобы найти собеседника.", "Go to the Contacts tab (second icon) or use search to find someone."),
+                                    color = dimTextColor,
                                     fontSize = 13.sp,
                                     textAlign = TextAlign.Center
                                 )
@@ -305,26 +312,26 @@ fun ChatListScreen(
                                             modifier = Modifier
                                                 .size(48.dp)
                                                 .clip(RoundedCornerShape(16.dp))
-                                                .background(DarkSurface)
-                                                .border(1.dp, LightSurface, RoundedCornerShape(16.dp)),
+                                                .background(surfaceColor)
+                                                .border(1.dp, borderColor, RoundedCornerShape(16.dp)),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Text(chat.name.take(1), color = White, fontWeight = FontWeight.Bold)
+                                            Text(chat.name.take(1), color = textColor, fontWeight = FontWeight.Bold)
                                             if (chat.isOnline) {
                                                 Box(
                                                     modifier = Modifier
                                                         .size(12.dp)
                                                         .clip(CircleShape)
                                                         .background(SuccessGreen)
-                                                        .border(2.dp, Black, CircleShape)
+                                                        .border(2.dp, bgColor, CircleShape)
                                                         .align(Alignment.BottomEnd)
                                                 )
                                             }
                                         }
                                         Spacer(modifier = Modifier.width(14.dp))
                                         Column {
-                                            Text(chat.name, color = White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                                            Text(chat.username, color = DimText, fontSize = 13.sp)
+                                            Text(chat.name, color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                                            Text(chat.username, color = dimTextColor, fontSize = 13.sp)
                                         }
                                     }
                                 }
@@ -338,25 +345,25 @@ fun ChatListScreen(
                             OutlinedTextField(
                                 value = searchQuery,
                                 onValueChange = { searchQuery = it },
-                                placeholder = { Text("Поиск по @username...", color = DimText) },
+                                placeholder = { Text(s("Поиск по @username...", "Search by @username..."), color = dimTextColor) },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 16.dp, vertical = 8.dp),
                                 shape = RoundedCornerShape(16.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = White,
-                                    unfocusedBorderColor = LightSurface,
-                                    focusedTextColor = White,
-                                    unfocusedTextColor = White,
-                                    cursorColor = White,
-                                    focusedContainerColor = DarkSurface,
-                                    unfocusedContainerColor = DarkSurface
+                                    focusedBorderColor = textColor,
+                                    unfocusedBorderColor = borderColor,
+                                    focusedTextColor = textColor,
+                                    unfocusedTextColor = textColor,
+                                    cursorColor = textColor,
+                                    focusedContainerColor = surfaceColor,
+                                    unfocusedContainerColor = surfaceColor
                                 ),
-                                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = DimText) },
+                                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = dimTextColor) },
                                 trailingIcon = {
                                     if (searchQuery.isNotEmpty()) {
                                         IconButton(onClick = { searchQuery = "" }) {
-                                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = White)
+                                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = textColor)
                                         }
                                     }
                                 },
@@ -368,8 +375,8 @@ fun ChatListScreen(
                             if (searchQuery.isNotBlank()) {
                                 // Search list mode
                                 Text(
-                                    text = "РЕЗУЛЬТАТЫ ПОИСКА",
-                                    color = DimText,
+                                    text = s("РЕЗУЛЬТАТЫ ПОИСКА", "SEARCH RESULTS"),
+                                    color = dimTextColor,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     letterSpacing = 1.sp,
@@ -378,14 +385,14 @@ fun ChatListScreen(
 
                                 if (isSearching) {
                                     Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                                        CircularProgressIndicator(color = White, modifier = Modifier.size(24.dp))
+                                        CircularProgressIndicator(color = textColor, modifier = Modifier.size(24.dp))
                                     }
                                 } else if (searchResults.isEmpty()) {
                                     Box(
                                         modifier = Modifier.fillMaxWidth().padding(40.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Text("Никого не найдено", color = DimText, fontSize = 14.sp)
+                                        Text(s("Никого не найдено", "No one found"), color = dimTextColor, fontSize = 14.sp)
                                     }
                                 } else {
                                     LazyColumn(
@@ -404,8 +411,8 @@ fun ChatListScreen(
                                                     modifier = Modifier
                                                         .size(44.dp)
                                                         .clip(RoundedCornerShape(14.dp))
-                                                        .background(DarkSurface)
-                                                        .border(1.dp, LightSurface, RoundedCornerShape(14.dp)),
+                                                        .background(surfaceColor)
+                                                        .border(1.dp, borderColor, RoundedCornerShape(14.dp)),
                                                     contentAlignment = Alignment.Center
                                                 ) {
                                                     if (user.avatarUrl.isNotBlank()) {
@@ -416,13 +423,13 @@ fun ChatListScreen(
                                                             contentScale = androidx.compose.ui.layout.ContentScale.Crop
                                                         )
                                                     } else {
-                                                        Icon(Icons.Default.Person, contentDescription = null, tint = DimText)
+                                                        Icon(Icons.Default.Person, contentDescription = null, tint = dimTextColor)
                                                     }
                                                 }
                                                 Spacer(Modifier.width(16.dp))
                                                 Column {
-                                                    Text(user.name, color = White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                                                    Text("@${user.username}", color = DimText, fontSize = 12.sp)
+                                                    Text(user.name, color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                                                    Text("@${user.username}", color = dimTextColor, fontSize = 12.sp)
                                                 }
                                             }
                                         }
@@ -431,8 +438,8 @@ fun ChatListScreen(
                             } else {
                                 // Contacts mode
                                 Text(
-                                    text = "МОИ КОНТАКТЫ (${contactsList.size})",
-                                    color = DimText,
+                                    text = s("МОИ КОНТАКТЫ", "MY CONTACTS") + " (${contactsList.size})",
+                                    color = dimTextColor,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     letterSpacing = 1.sp,
@@ -441,7 +448,7 @@ fun ChatListScreen(
 
                                 if (isLoadingContacts) {
                                     Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                                        CircularProgressIndicator(color = White, modifier = Modifier.size(24.dp))
+                                        CircularProgressIndicator(color = textColor, modifier = Modifier.size(24.dp))
                                     }
                                 } else if (contactsList.isEmpty()) {
                                     Column(
@@ -452,16 +459,16 @@ fun ChatListScreen(
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
                                         Text(
-                                            "Ваш список контактов пуст",
-                                            color = White,
+                                            s("Ваш список контактов пуст", "Your contact list is empty"),
+                                            color = textColor,
                                             fontWeight = FontWeight.SemiBold,
                                             fontSize = 15.sp,
                                             textAlign = TextAlign.Center
                                         )
                                         Spacer(Modifier.height(8.dp))
                                         Text(
-                                            "Используйте поле ввода выше, чтобы найти пользователей по их юзернейму и добавить в контакты.",
-                                            color = DimText,
+                                            s("Используйте поле ввода выше, чтобы найти пользователей по их юзернейму и добавить в контакты.", "Use the input field above to find users by their username and add them to contacts."),
+                                            color = dimTextColor,
                                             fontSize = 12.sp,
                                             textAlign = TextAlign.Center,
                                             lineHeight = 18.sp
@@ -484,8 +491,8 @@ fun ChatListScreen(
                                                     modifier = Modifier
                                                         .size(44.dp)
                                                         .clip(RoundedCornerShape(14.dp))
-                                                        .background(DarkSurface)
-                                                        .border(1.dp, LightSurface, RoundedCornerShape(14.dp)),
+                                                        .background(surfaceColor)
+                                                        .border(1.dp, borderColor, RoundedCornerShape(14.dp)),
                                                     contentAlignment = Alignment.Center
                                                 ) {
                                                     if (contact.avatarUrl.isNotBlank()) {
@@ -496,13 +503,13 @@ fun ChatListScreen(
                                                             contentScale = androidx.compose.ui.layout.ContentScale.Crop
                                                         )
                                                     } else {
-                                                        Icon(Icons.Default.Person, contentDescription = null, tint = DimText)
+                                                        Icon(Icons.Default.Person, contentDescription = null, tint = dimTextColor)
                                                     }
                                                 }
                                                 Spacer(Modifier.width(16.dp))
                                                 Column {
-                                                    Text(contact.name, color = White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                                                    Text("@${contact.username}", color = DimText, fontSize = 12.sp)
+                                                    Text(contact.name, color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                                                    Text("@${contact.username}", color = dimTextColor, fontSize = 12.sp)
                                                 }
                                             }
                                         }
@@ -523,21 +530,21 @@ fun ChatListScreen(
                             Icon(
                                 imageVector = Icons.Default.Group,
                                 contentDescription = null,
-                                tint = DimText,
+                                tint = dimTextColor,
                                 modifier = Modifier.size(64.dp)
                             )
                             Spacer(Modifier.height(16.dp))
                             Text(
-                                "Группы и каналы",
-                                color = White,
+                                s("Группы и каналы", "Groups and Channels"),
+                                color = textColor,
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 textAlign = TextAlign.Center
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                "Данный раздел находится во временной разработке и будет доступен в следующих обновлениях.",
-                                color = DimText,
+                                s("Данный раздел находится во временной разработке и будет доступен в следующих обновлениях.", "This section is currently under development and will be available in future updates."),
+                                color = dimTextColor,
                                 fontSize = 13.sp,
                                 textAlign = TextAlign.Center,
                                 lineHeight = 20.sp
@@ -552,8 +559,8 @@ fun ChatListScreen(
                         .align(Alignment.BottomCenter)
                         .padding(bottom = 24.dp)
                         .clip(RoundedCornerShape(24.dp))
-                        .background(Color(0xFF0F0F0F))
-                        .border(1.dp, LightSurface, RoundedCornerShape(24.dp))
+                        .background(if (isDarkTheme) Color(0xFF0F0F0F) else Color(0xFFEBEBEB))
+                        .border(1.dp, borderColor, RoundedCornerShape(24.dp))
                         .padding(horizontal = 16.dp, vertical = 6.dp)
                 ) {
                     val activeIcons = listOf(
@@ -571,7 +578,7 @@ fun ChatListScreen(
                                 Icon(
                                     imageVector = icon,
                                     contentDescription = "Tab $index",
-                                    tint = if (isSelected) White else DimText,
+                                    tint = if (isSelected) textColor else dimTextColor,
                                     modifier = Modifier.size(if (isSelected) 26.dp else 22.dp)
                                 )
                             }
@@ -584,7 +591,7 @@ fun ChatListScreen(
 }
 
 @Composable
-fun DrawerMenuItem(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, onClick: () -> Unit) {
+fun DrawerMenuItem(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, textColor: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -592,8 +599,8 @@ fun DrawerMenuItem(icon: androidx.compose.ui.graphics.vector.ImageVector, text: 
             .padding(vertical = 14.dp, horizontal = 24.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = text, tint = White, modifier = Modifier.size(20.dp))
+        Icon(icon, contentDescription = text, tint = textColor, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(16.dp))
-        Text(text, color = White, fontSize = 14.sp)
+        Text(text, color = textColor, fontSize = 14.sp)
     }
 }

@@ -46,6 +46,16 @@ fun OtherProfileScreen(
     val currentUser = FirebaseAuth.getInstance().currentUser
     val database = FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/")
 
+    val selectedLanguage by com.example.AppPreferences.language.collectAsState()
+    val s: (String, String) -> String = { ru, en -> if (selectedLanguage == "English") en else ru }
+
+    val isDarkTheme by com.example.AppPreferences.isDarkTheme.collectAsState()
+    val bgColor = if (isDarkTheme) Black else Color(0xFFF5F5F7)
+    val surfaceColor = if (isDarkTheme) DarkSurface else White
+    val borderColor = if (isDarkTheme) LightSurface else Color(0xFFE0E0E0)
+    val textColor = if (isDarkTheme) White else Black
+    val dimTextColor = if (isDarkTheme) DimText else Color(0xFF666666)
+
     LaunchedEffect(userId) {
         if (currentUser != null) {
             try {
@@ -76,20 +86,20 @@ fun OtherProfileScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Профиль", color = White, fontWeight = FontWeight.Bold) },
+                title = { Text(s("Профиль", "Profile"), color = textColor, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад", tint = White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = s("Назад", "Back"), tint = textColor)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Black)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = bgColor)
             )
         },
-        containerColor = Black
+        containerColor = bgColor
     ) { paddingValues ->
         if (isLoading) {
             Box(Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = DimText)
+                CircularProgressIndicator(color = dimTextColor)
             }
         } else {
             Column(
@@ -106,22 +116,22 @@ fun OtherProfileScreen(
                     modifier = Modifier
                         .size(120.dp)
                         .clip(RoundedCornerShape(40.dp))
-                        .background(DarkSurface)
-                        .border(1.dp, LightSurface, RoundedCornerShape(40.dp)),
+                        .background(surfaceColor)
+                        .border(1.dp, borderColor, RoundedCornerShape(40.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     if (avatarUrl.isNotBlank()) {
                         coil.compose.AsyncImage(
                             model = avatarUrl,
-                            contentDescription = "Аватар",
+                            contentDescription = s("Аватар", "Avatar"),
                             modifier = Modifier.fillMaxSize(),
                             contentScale = androidx.compose.ui.layout.ContentScale.Crop
                         )
                     } else {
                         Icon(
                             Icons.Default.Person,
-                            contentDescription = "Аватар",
-                            tint = DimText,
+                            contentDescription = s("Аватар", "Avatar"),
+                            tint = dimTextColor,
                             modifier = Modifier.size(60.dp)
                         )
                     }
@@ -132,7 +142,7 @@ fun OtherProfileScreen(
                 // Name and @username
                 Text(
                     text = name,
-                    color = White,
+                    color = textColor,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
@@ -140,7 +150,7 @@ fun OtherProfileScreen(
                 if (username.isNotBlank()) {
                     Text(
                         text = "@$username",
-                        color = DimText,
+                        color = dimTextColor,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                         modifier = Modifier.padding(top = 4.dp)
@@ -154,14 +164,14 @@ fun OtherProfileScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(24.dp))
-                        .background(DarkSurface)
-                        .border(1.dp, LightSurface, RoundedCornerShape(24.dp))
+                        .background(surfaceColor)
+                        .border(1.dp, borderColor, RoundedCornerShape(24.dp))
                         .padding(20.dp)
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        DetailItem("Обо мне", if (bio.isNotBlank()) bio else "Информация отсутствует")
-                        DetailItem("Пол", if (gender.isNotBlank()) gender else "Не указан")
-                        DetailItem("Дата рождения", if (birthday.isNotBlank()) birthday else "Не указана")
+                        DetailItem(s("Обо мне", "About me"), if (bio.isNotBlank()) bio else s("Информация отсутствует", "No information"), textColor, dimTextColor)
+                        DetailItem(s("Пол", "Gender"), if (gender.isNotBlank()) gender else s("Не указан", "Not specified"), textColor, dimTextColor)
+                        DetailItem(s("Дата рождения", "Birth date"), if (birthday.isNotBlank()) birthday else s("Не указана", "Not specified"), textColor, dimTextColor)
                     }
                 }
 
@@ -190,10 +200,10 @@ fun OtherProfileScreen(
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isContact) DarkSurface else White,
-                        contentColor = if (isContact) White else Black
+                        containerColor = if (isContact) borderColor else textColor,
+                        contentColor = if (isContact) textColor else bgColor
                     ),
-                    border = if (isContact) borderStroke() else null
+                    border = if (isContact) androidx.compose.foundation.BorderStroke(1.dp, borderColor) else null
                 ) {
                     Icon(
                         imageVector = if (isContact) Icons.Default.PersonRemove else Icons.Default.PersonAdd,
@@ -202,7 +212,7 @@ fun OtherProfileScreen(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = if (isContact) "Удалить из контактов" else "Добавить в контакты",
+                        text = if (isContact) s("Удалить из контактов", "Remove from contacts") else s("Добавить в контакты", "Add to contacts"),
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -217,8 +227,8 @@ fun OtherProfileScreen(
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        disabledContainerColor = Color(0xFF1E1E1E),
-                        disabledContentColor = Color(0xFF555555)
+                        disabledContainerColor = if (isDarkTheme) Color(0xFF1E1E1E) else Color(0xFFE0E0E0),
+                        disabledContentColor = if (isDarkTheme) Color(0xFF555555) else Color(0xFFA0A0A0)
                     )
                 ) {
                     Icon(
@@ -228,7 +238,7 @@ fun OtherProfileScreen(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "Написать (Временно недоступно)",
+                        text = s("Написать (Временно недоступно)", "Write (Temporarily unavailable)"),
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -239,13 +249,10 @@ fun OtherProfileScreen(
 }
 
 @Composable
-fun borderStroke() = androidx.compose.foundation.BorderStroke(1.dp, LightSurface)
-
-@Composable
-fun DetailItem(label: String, value: String) {
+fun DetailItem(label: String, value: String, textColor: Color, dimTextColor: Color) {
     Column {
-        Text(text = label, color = DimText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        Text(text = label, color = dimTextColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(4.dp))
-        Text(text = value, color = White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+        Text(text = value, color = textColor, fontSize = 15.sp, fontWeight = FontWeight.Medium)
     }
 }

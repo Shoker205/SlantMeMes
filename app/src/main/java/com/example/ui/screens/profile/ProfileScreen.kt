@@ -80,6 +80,16 @@ fun ProfileScreen(
     val context = LocalContext.current
     val user = FirebaseAuth.getInstance().currentUser
     
+    val selectedLanguage by com.example.AppPreferences.language.collectAsState()
+    val s: (String, String) -> String = { ru, en -> if (selectedLanguage == "English") en else ru }
+
+    val isDarkTheme by com.example.AppPreferences.isDarkTheme.collectAsState()
+    val bgColor = if (isDarkTheme) Black else Color(0xFFF5F5F7)
+    val surfaceColor = if (isDarkTheme) DarkSurface else White
+    val borderColor = if (isDarkTheme) LightSurface else Color(0xFFE0E0E0)
+    val textColor = if (isDarkTheme) White else Black
+    val dimTextColor = if (isDarkTheme) DimText else Color(0xFF666666)
+    
     // Snackbar for errors/success
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -93,7 +103,7 @@ fun ProfileScreen(
                 if (base64 != null) {
                     avatarUrl = "data:image/jpeg;base64,$base64"
                 } else {
-                    snackbarHostState.showSnackbar("Не удалось обработать изображение")
+                    snackbarHostState.showSnackbar(s("Не удалось обработать изображение", "Failed to process image"))
                 }
                 isLoading = false
             }
@@ -125,7 +135,7 @@ fun ProfileScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (isEditing) "Редактирование" else "Мой профиль", color = White, fontWeight = FontWeight.Bold) },
+                title = { Text(if (isEditing) s("Редактирование", "Edit Profile") else s("Мой профиль", "My Profile"), color = textColor, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = {
                         if (isEditing) {
@@ -134,7 +144,7 @@ fun ProfileScreen(
                             onBack()
                         }
                     }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад", tint = White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = s("Назад", "Back"), tint = textColor)
                     }
                 },
                 actions = {
@@ -158,31 +168,31 @@ fun ProfileScreen(
                                             .updateChildren(updates)
                                             .await()
                                         isEditing = false
-                                        snackbarHostState.showSnackbar("Профиль сохранен")
+                                        snackbarHostState.showSnackbar(s("Профиль сохранен", "Profile saved"))
                                     } catch(e: Exception) {
-                                        snackbarHostState.showSnackbar("Ошибка сохранения: ${e.localizedMessage}")
+                                        snackbarHostState.showSnackbar(s("Ошибка сохранения: ", "Save error: ") + e.localizedMessage)
                                     }
                                     isLoading = false
                                 }
                             }
                         }) {
-                            Icon(Icons.Default.Save, contentDescription = "Сохранить", tint = DimText)
+                            Icon(Icons.Default.Save, contentDescription = s("Сохранить", "Save"), tint = dimTextColor)
                         }
                     } else {
                         IconButton(onClick = { isEditing = true }) {
-                            Icon(Icons.Default.Edit, contentDescription = "Редактировать", tint = DimText)
+                            Icon(Icons.Default.Edit, contentDescription = s("Редактировать", "Edit"), tint = dimTextColor)
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Black)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = bgColor)
             )
         },
-        containerColor = Black,
+        containerColor = bgColor,
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
         if (isLoading) {
             Box(Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = DimText)
+                CircularProgressIndicator(color = dimTextColor)
             }
         } else {
             Column(
@@ -200,8 +210,8 @@ fun ProfileScreen(
                     modifier = Modifier
                         .size(110.dp)
                         .clip(RoundedCornerShape(36.dp))
-                        .background(DarkSurface)
-                        .border(1.dp, if (isEditing) White else LightSurface, RoundedCornerShape(36.dp))
+                        .background(surfaceColor)
+                        .border(1.dp, if (isEditing) textColor else borderColor, RoundedCornerShape(36.dp))
                         .clickable(enabled = isEditing) {
                             galleryLauncher.launch("image/*")
                         },
@@ -210,12 +220,12 @@ fun ProfileScreen(
                     if (avatarUrl.isNotBlank()) {
                         coil.compose.AsyncImage(
                             model = avatarUrl,
-                            contentDescription = "Аватар",
+                            contentDescription = s("Аватар", "Avatar"),
                             modifier = Modifier.fillMaxSize(),
                             contentScale = androidx.compose.ui.layout.ContentScale.Crop
                         )
                     } else {
-                        Icon(Icons.Default.Person, contentDescription = "Аватар", tint = DimText, modifier = Modifier.size(54.dp))
+                        Icon(Icons.Default.Person, contentDescription = s("Аватар", "Avatar"), tint = dimTextColor, modifier = Modifier.size(54.dp))
                     }
                     if (isEditing) {
                         Box(
@@ -226,8 +236,8 @@ fun ProfileScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Edit,
-                                contentDescription = "Изменить",
-                                tint = White,
+                                contentDescription = s("Изменить", "Edit"),
+                                tint = Color.White,
                                 modifier = Modifier.size(24.dp)
                             )
                         }
@@ -239,15 +249,15 @@ fun ProfileScreen(
                 if (!isEditing) {
                     // View Mode: Display cleanly formatted content
                     Text(
-                        text = if (name.isNotBlank()) name else "Без имени",
-                        color = White,
+                        text = if (name.isNotBlank()) name else s("Без имени", "No name"),
+                        color = textColor,
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold
                     )
                     if (username.isNotBlank()) {
                         Text(
                             text = "@$username",
-                            color = DimText,
+                            color = dimTextColor,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier.padding(top = 4.dp)
@@ -261,27 +271,27 @@ fun ProfileScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(24.dp))
-                            .background(DarkSurface)
-                            .border(1.dp, LightSurface, RoundedCornerShape(24.dp))
+                            .background(surfaceColor)
+                            .border(1.dp, borderColor, RoundedCornerShape(24.dp))
                             .padding(20.dp)
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            CompactDetailItem("Обо мне", if (bio.isNotBlank()) bio else "Информация отсутствует")
-                            HorizontalDivider(color = LightSurface.copy(alpha = 0.4f), thickness = 0.5.dp)
-                            CompactDetailItem("Пол", if (gender.isNotBlank()) gender else "Не указан")
-                            HorizontalDivider(color = LightSurface.copy(alpha = 0.4f), thickness = 0.5.dp)
-                            CompactDetailItem("Дата рождения", if (birthday.isNotBlank()) birthday else "Не указана")
+                            CompactDetailItem(s("Обо мне", "About me"), if (bio.isNotBlank()) bio else s("Информация отсутствует", "No information"), textColor, dimTextColor)
+                            HorizontalDivider(color = borderColor.copy(alpha = 0.4f), thickness = 0.5.dp)
+                            CompactDetailItem(s("Пол", "Gender"), if (gender.isNotBlank()) gender else s("Не указан", "Not specified"), textColor, dimTextColor)
+                            HorizontalDivider(color = borderColor.copy(alpha = 0.4f), thickness = 0.5.dp)
+                            CompactDetailItem(s("Дата рождения", "Birth date"), if (birthday.isNotBlank()) birthday else s("Не указана", "Not specified"), textColor, dimTextColor)
                         }
                     }
                 } else {
                     // Edit Mode: compact input fields with scrollability
                     Spacer(Modifier.height(16.dp))
                     
-                    ProfileEditField("Имя", name) { name = it }
-                    ProfileEditField("Юзернейм", username) { username = it }
-                    ProfileEditField("Обо мне", bio) { bio = it }
-                    ProfileEditField("Пол", gender) { gender = it }
-                    ProfileEditField("Дата рождения", birthday) { birthday = it }
+                    ProfileEditField(s("Имя", "Name"), name, textColor, dimTextColor, surfaceColor, borderColor) { name = it }
+                    ProfileEditField(s("Юзернейм", "Username"), username, textColor, dimTextColor, surfaceColor, borderColor) { username = it }
+                    ProfileEditField(s("Обо мне", "About me"), bio, textColor, dimTextColor, surfaceColor, borderColor) { bio = it }
+                    ProfileEditField(s("Пол", "Gender"), gender, textColor, dimTextColor, surfaceColor, borderColor) { gender = it }
+                    ProfileEditField(s("Дата рождения", "Birth date"), birthday, textColor, dimTextColor, surfaceColor, borderColor) { birthday = it }
                 }
 
                 Spacer(Modifier.height(40.dp))
@@ -291,33 +301,34 @@ fun ProfileScreen(
 }
 
 @Composable
-fun CompactDetailItem(label: String, value: String) {
+fun CompactDetailItem(label: String, value: String, textColor: Color, dimTextColor: Color) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text(text = label, color = DimText, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+        Text(text = label, color = dimTextColor, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
         Spacer(Modifier.height(4.dp))
-        Text(text = value, color = White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+        Text(text = value, color = textColor, fontSize = 15.sp, fontWeight = FontWeight.Medium)
     }
 }
 
 @Composable
-fun ProfileEditField(label: String, value: String, onValueChange: (String) -> Unit) {
+fun ProfileEditField(label: String, value: String, textColor: Color, dimTextColor: Color, surfaceColor: Color, borderColor: Color, onValueChange: (String) -> Unit) {
+    val isMultiline = label == "Обо мне" || label == "About me"
     Column(modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
-        Text(label, color = DimText, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 6.dp, start = 4.dp))
+        Text(label, color = dimTextColor, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 6.dp, start = 4.dp))
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
             modifier = Modifier.fillMaxWidth(),
-            singleLine = label != "Обо мне",
-            maxLines = if (label == "Обо мне") 4 else 1,
+            singleLine = !isMultiline,
+            maxLines = if (isMultiline) 4 else 1,
             shape = RoundedCornerShape(14.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                unfocusedBorderColor = LightSurface,
-                focusedBorderColor = White,
-                unfocusedTextColor = White,
-                focusedTextColor = White,
-                cursorColor = White,
-                focusedContainerColor = DarkSurface,
-                unfocusedContainerColor = DarkSurface
+                unfocusedBorderColor = borderColor,
+                focusedBorderColor = textColor,
+                unfocusedTextColor = textColor,
+                focusedTextColor = textColor,
+                cursorColor = textColor,
+                focusedContainerColor = surfaceColor,
+                unfocusedContainerColor = surfaceColor
             )
         )
     }
