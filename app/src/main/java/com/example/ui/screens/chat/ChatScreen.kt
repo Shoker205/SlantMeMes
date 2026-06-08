@@ -343,26 +343,28 @@ fun ChatScreen(
         topBar = {
             TopAppBar(
                 title = { 
-                    if (selectedMessages.isNotEmpty()) {
-                        Text(selectedMessages.size.toString(), color = textColor, fontSize = 18.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                    } else {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.clickable { onProfileClick() }
-                        ) {
-                            Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(surfaceColor)) {
-                                if (recipientAvatar.isNotBlank()) {
-                                    com.example.ui.components.AvatarImage(avatarUrl = recipientAvatar, contentDescription = null, modifier = Modifier.fillMaxSize())
+                    androidx.compose.animation.AnimatedContent(targetState = selectedMessages.isNotEmpty(), label = "") { hasSelection ->
+                        if (hasSelection) {
+                            Text(selectedMessages.size.toString(), color = textColor, fontSize = 18.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                        } else {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.clickable { onProfileClick() }
+                            ) {
+                                Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(surfaceColor)) {
+                                    if (recipientAvatar.isNotBlank()) {
+                                        com.example.ui.components.AvatarImage(avatarUrl = recipientAvatar, contentDescription = null, modifier = Modifier.fillMaxSize())
+                                    }
                                 }
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            Column(verticalArrangement = Arrangement.Center) {
-                                Text(recipientName, color = textColor, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                                if (recipientOnline) {
-                                    Text("онлайн", color = Color(0xFF4FC3F7), fontSize = 12.sp)
-                                } else if (recipientLastSeen > 0L) {
-                                    val dateStr = java.text.SimpleDateFormat("HH:mm, dd MMM", java.util.Locale.getDefault()).format(java.util.Date(recipientLastSeen))
-                                    Text("был(а) $dateStr", color = dimTextColor, fontSize = 12.sp)
+                                Spacer(Modifier.width(12.dp))
+                                Column(verticalArrangement = Arrangement.Center) {
+                                    Text(recipientName, color = textColor, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                    if (recipientOnline) {
+                                        Text("онлайн", color = Color(0xFF4FC3F7), fontSize = 12.sp)
+                                    } else if (recipientLastSeen > 0L) {
+                                        val dateStr = java.text.SimpleDateFormat("HH:mm, dd MMM", java.util.Locale.getDefault()).format(java.util.Date(recipientLastSeen))
+                                        Text("был(а) $dateStr", color = dimTextColor, fontSize = 12.sp)
+                                    }
                                 }
                             }
                         }
@@ -412,13 +414,13 @@ fun ChatScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(messages) { msg ->
+                items(messages, key = { it.id }) { msg ->
                     val isMine = msg.senderId == currentUser.uid
                     val isSelected = selectedMessages.contains(msg.id)
                     val isHighlighted = highlightedMessageId == msg.id
                     var swipeOffset by remember { mutableFloatStateOf(0f) }
                     
-                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                    Box(modifier = Modifier.fillMaxWidth().animateItemPlacement(), contentAlignment = Alignment.CenterEnd) {
                         if (swipeOffset < -20f) {
                             Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = "Reply", tint = dimTextColor, modifier = Modifier.padding(end = 16.dp).size(24.dp).scale(scaleX = -1f, scaleY = 1f))
                         }
@@ -675,15 +677,15 @@ fun ChatScreen(
                     .navigationBarsPadding()
             ) {
                 Column {
-                    if (pendingAttachments.isNotEmpty()) {
+                    androidx.compose.animation.AnimatedVisibility(visible = pendingAttachments.isNotEmpty()) {
                         androidx.compose.foundation.lazy.LazyRow(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            items(pendingAttachments.size) { index ->
+                            items(pendingAttachments.size, key = { index -> pendingAttachments[index].uri.toString() + index }) { index ->
                                 val attachment = pendingAttachments[index]
                                 Box(
-                                    modifier = Modifier.size(64.dp).clip(RoundedCornerShape(8.dp)).background(bgColor),
+                                    modifier = Modifier.size(64.dp).clip(RoundedCornerShape(8.dp)).background(bgColor).animateItemPlacement(),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     if (attachment.type.startsWith("image") || attachment.type.startsWith("video")) {
@@ -709,38 +711,42 @@ fun ChatScreen(
                             }
                         }
                     }
-                    if (isUploading) {
+                    androidx.compose.animation.AnimatedVisibility(visible = isUploading) {
                         Text("Загрузка медиа...", color = Color(0xFF4FC3F7), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                     }
-                    if (replyToMessage != null) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null, tint = dimTextColor, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("В ответ на", color = Color(0xFF4FC3F7), fontSize = 12.sp)
-                                Text(replyToMessage!!.text, color = textColor, fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                            }
-                            IconButton(onClick = { replyToMessage = null }, modifier = Modifier.size(24.dp)) {
-                                Icon(Icons.Default.Close, contentDescription = "Close", tint = dimTextColor)
+                    androidx.compose.animation.AnimatedVisibility(visible = replyToMessage != null) {
+                        if (replyToMessage != null) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null, tint = dimTextColor, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("В ответ на", color = Color(0xFF4FC3F7), fontSize = 12.sp)
+                                    Text(replyToMessage!!.text, color = textColor, fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                }
+                                IconButton(onClick = { replyToMessage = null }, modifier = Modifier.size(24.dp)) {
+                                    Icon(Icons.Default.Close, contentDescription = "Close", tint = dimTextColor)
+                                }
                             }
                         }
                     }
-                    if (messageToEdit != null) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.Edit, contentDescription = null, tint = dimTextColor, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Редактирование", color = Color(0xFF4FC3F7), fontSize = 12.sp)
-                                Text(messageToEdit!!.text, color = textColor, fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                            }
-                            IconButton(onClick = { messageToEdit = null; inputText = "" }, modifier = Modifier.size(24.dp)) {
-                                Icon(Icons.Default.Close, contentDescription = "Close", tint = dimTextColor)
+                    androidx.compose.animation.AnimatedVisibility(visible = messageToEdit != null) {
+                        if (messageToEdit != null) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = null, tint = dimTextColor, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Редактирование", color = Color(0xFF4FC3F7), fontSize = 12.sp)
+                                    Text(messageToEdit!!.text, color = textColor, fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                }
+                                IconButton(onClick = { messageToEdit = null; inputText = "" }, modifier = Modifier.size(24.dp)) {
+                                    Icon(Icons.Default.Close, contentDescription = "Close", tint = dimTextColor)
+                                }
                             }
                         }
                     }
@@ -778,11 +784,21 @@ fun ChatScreen(
                     }
                     
                     val ctx = androidx.compose.ui.platform.LocalContext.current
+                    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+                    val recorder = remember { com.example.utils.VoiceRecorder(ctx) }
+                    var audioPermissionGranted by remember { mutableStateOf(androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) }
+                    val audioPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+                        audioPermissionGranted = isGranted
+                        if (!isGranted) {
+                            android.widget.Toast.makeText(ctx, "Разрешение на микрофон необходимо", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
                     var isRecording by remember { mutableStateOf(false) }
                     var isRecordingLocked by remember { mutableStateOf(false) }
                     var recordSlideOffset by remember { mutableFloatStateOf(0f) }
                     var recordSlideYOffset by remember { mutableFloatStateOf(0f) }
                     var recordingSeconds by remember { mutableIntStateOf(0) }
+                    var hasVibratedForLock by remember { mutableStateOf(false) }
                     
                     LaunchedEffect(isRecording) {
                         if (isRecording) {
@@ -805,6 +821,7 @@ fun ChatScreen(
                         ) {
                             if (isRecordingLocked) {
                                 IconButton(onClick = {
+                                    recorder.cancelRecording()
                                     isRecording = false
                                     isRecordingLocked = false
                                 }) {
@@ -841,11 +858,13 @@ fun ChatScreen(
                             }
 
                             if (!isRecordingLocked) {
-                                Text("< Отмените свайпом", color = dimTextColor, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.offset { androidx.compose.ui.unit.IntOffset(recordSlideOffset.toInt(), 0) })
+                                val cancelAlpha = (1f - (-recordSlideOffset / 150f)).coerceIn(0f, 1f)
+                                Text("< Отмените свайпом", color = dimTextColor.copy(alpha = cancelAlpha), fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.offset { androidx.compose.ui.unit.IntOffset(recordSlideOffset.toInt(), 0) })
                                 Spacer(Modifier.width(16.dp))
                             } else {
                                 IconButton(onClick = {
-                                    android.widget.Toast.makeText(ctx, "Голосовое отправлено", android.widget.Toast.LENGTH_SHORT).show()
+                                    val file = recorder.stopRecording()
+                                    if (file != null) uploadAndSendMessage("", android.net.Uri.fromFile(file))
                                     isRecording = false
                                     isRecordingLocked = false
                                 }) {
@@ -860,7 +879,7 @@ fun ChatScreen(
                                 .padding(end = 8.dp)
                                 .defaultMinSize(minHeight = 40.dp)
                                 .background(bgColor, RoundedCornerShape(20.dp))
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             BasicTextField(
@@ -880,10 +899,10 @@ fun ChatScreen(
                         }
                     }
                     
-                    val micButtonSize = if (isRecording && !isRecordingLocked) 64.dp else 48.dp
-                    Box(modifier = Modifier.padding(bottom = if (isRecording && !isRecordingLocked) 0.dp else 4.dp)) {
+                    val micButtonSize by animateDpAsState(targetValue = if (isRecording && !isRecordingLocked) 64.dp else 44.dp, label = "")
+                    Box(modifier = Modifier.padding(bottom = if (isRecording && !isRecordingLocked) 0.dp else 2.dp)) {
                         if (isRecording && !isRecordingLocked && recordSlideYOffset < -20f) {
-                            Box(modifier = Modifier.offset(x = 16.dp, y = (-60).dp).background(surfaceColor, CircleShape).padding(8.dp)) {
+                            Box(modifier = Modifier.offset(x = 14.dp, y = (-60).dp).background(surfaceColor, CircleShape).padding(8.dp)) {
                                 Icon(Icons.Default.Lock, contentDescription = "Lock", tint = dimTextColor, modifier = Modifier.size(16.dp))
                             }
                         }
@@ -894,7 +913,7 @@ fun ChatScreen(
                                     if (!isRecordingLocked) recordSlideYOffset.toInt() else 0
                                 ) }
                                 .clip(CircleShape)
-                                .background(if (isRecordingLocked) Color.Red.copy(alpha = 0.2f) else textColor)
+                                .background(if (isRecordingLocked) Color.Red.copy(alpha = 0.2f) else dimTextColor.copy(alpha = 0.2f))
                                 .size(micButtonSize)
                                 .pointerInput(inputText, isRecordingLocked) {
                                     if (inputText.isNotBlank()) {
@@ -904,25 +923,34 @@ fun ChatScreen(
                                         }
                                     } else if (isRecordingLocked) {
                                         detectTapGestures {
+                                            recorder.cancelRecording()
                                             isRecording = false
                                             isRecordingLocked = false
                                         }
                                     } else {
                                         detectDragGestures(
                                             onDragStart = { 
+                                                if (!audioPermissionGranted) {
+                                                    audioPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                                                    return@detectDragGestures
+                                                }
                                                 isRecording = true 
                                                 recordSlideOffset = 0f
                                                 recordSlideYOffset = 0f
+                                                hasVibratedForLock = false
+                                                recorder.startRecording()
                                             },
                                             onDragEnd = {
-                                                if (recordSlideOffset < -100f) {
+                                                if (recordSlideOffset < -150f) {
+                                                    recorder.cancelRecording()
                                                     isRecording = false // Cancel
-                                                } else if (recordSlideYOffset < -100f) {
+                                                } else if (recordSlideYOffset <= -60f || hasVibratedForLock) {
                                                     isRecordingLocked = true // Lock
                                                     recordSlideYOffset = 0f
                                                     recordSlideOffset = 0f
                                                 } else {
-                                                    android.widget.Toast.makeText(ctx, "Голосовое отправлено", android.widget.Toast.LENGTH_SHORT).show()
+                                                    val file = recorder.stopRecording()
+                                                    if (file != null) uploadAndSendMessage("", android.net.Uri.fromFile(file))
                                                     isRecording = false
                                                 }
                                                 if (!isRecordingLocked) {
@@ -931,6 +959,7 @@ fun ChatScreen(
                                                 }
                                             },
                                             onDragCancel = {
+                                                recorder.cancelRecording()
                                                 isRecording = false
                                                 isRecordingLocked = false
                                                 recordSlideOffset = 0f
@@ -942,9 +971,13 @@ fun ChatScreen(
                                                     val newX = recordSlideOffset + dragAmount.x
                                                     val newY = recordSlideYOffset + dragAmount.y
                                                     if (kotlin.math.abs(newX) > kotlin.math.abs(newY * 1.5f) && newX < 0f) {
-                                                        recordSlideOffset = newX
+                                                        recordSlideOffset = newX.coerceAtLeast(-200f)
                                                     } else if (newY < 0f) {
-                                                        recordSlideYOffset = newY
+                                                        recordSlideYOffset = newY.coerceAtLeast(-80f)
+                                                        if (recordSlideYOffset <= -70f && !hasVibratedForLock) {
+                                                            hasVibratedForLock = true
+                                                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                                        }
                                                     }
                                                 }
                                             }
@@ -954,11 +987,11 @@ fun ChatScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             if (inputText.isNotBlank()) {
-                                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = bgColor, modifier = Modifier.size(24.dp))
+                                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Color(0xFF4FC3F7), modifier = Modifier.size(24.dp))
                             } else if (isRecordingLocked) {
                                 Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.Red, modifier = Modifier.size(24.dp))
                             } else {
-                                Icon(Icons.Default.Mic, contentDescription = "Record Voice", tint = bgColor, modifier = Modifier.size(if (isRecording) 32.dp else 24.dp))
+                                Icon(Icons.Default.Mic, contentDescription = "Record Voice", tint = textColor, modifier = Modifier.size(if (isRecording) 32.dp else 24.dp))
                             }
                         }
                     }
