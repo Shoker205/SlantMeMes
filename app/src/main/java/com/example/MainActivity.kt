@@ -40,7 +40,11 @@ class MainActivity : ComponentActivity() {
       LaunchedEffect(Unit) {
           PushNotificationManager.init(applicationContext)
           val intent = android.content.Intent(applicationContext, ChatRealtimeService::class.java)
-          applicationContext.startService(intent)
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+              applicationContext.startForegroundService(intent)
+          } else {
+              applicationContext.startService(intent)
+          }
       }
 
       val isDarkTheme by AppPreferences.isDarkTheme.collectAsState()

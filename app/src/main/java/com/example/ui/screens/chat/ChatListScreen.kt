@@ -17,6 +17,9 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.ui.input.pointer.*
+import androidx.compose.foundation.gestures.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,7 +38,7 @@ import kotlinx.coroutines.tasks.await
 import androidx.compose.runtime.LaunchedEffect
 
 data class ChatItem(val id: String, val name: String, val lastMessage: String, val isOnline: Boolean, val timestamp: Long = 0L, val avatarUrl: String = "", val unreadCount: Int = 0)
-data class UserProfile(val uid: String, val name: String, val username: String, val avatarUrl: String)
+data class UserProfile(val uid: String, val name: String, val username: String, val avatarUrl: String, val isOnline: Boolean = false)
 
 @Composable
 fun ChatListScreen(
@@ -96,7 +99,8 @@ fun ChatListScreen(
                         val name = userSnap.child("name").getValue(String::class.java) ?: "User"
                         val username = userSnap.child("username").getValue(String::class.java) ?: ""
                         val avatarUrl = userSnap.child("avatarUrl").getValue(String::class.java) ?: ""
-                        list.add(UserProfile(uid, name, username, avatarUrl))
+                        val isOnline = userSnap.child("online").getValue(Boolean::class.java) ?: false
+                        list.add(UserProfile(uid, name, username, avatarUrl, isOnline))
                     }
                 }
                 contactsList = list
@@ -123,9 +127,10 @@ fun ChatListScreen(
                     val uName = child.child("name").getValue(String::class.java) ?: ""
                     val uUsername = child.child("username").getValue(String::class.java) ?: ""
                     val uAvatarUrl = child.child("avatarUrl").getValue(String::class.java) ?: ""
+                    val uIsOnline = child.child("online").getValue(Boolean::class.java) ?: false
                     
                     if (uUsername.lowercase().contains(queryClean)) {
-                        list.add(UserProfile(uid, uName, uUsername, uAvatarUrl))
+                        list.add(UserProfile(uid, uName, uUsername, uAvatarUrl, uIsOnline))
                     }
                 }
                 searchResults = list
@@ -185,8 +190,8 @@ fun ChatListScreen(
                                 val userSnap = database.getReference("users").child(peerId).get().await()
                                 val name = userSnap.child("name").getValue(String::class.java) ?: "User"
                                 val avatarUrl = userSnap.child("avatarUrl").getValue(String::class.java) ?: ""
-                                // Normally you'd monitor online status from RTDB presence
-                                chatsList.add(ChatItem(peerId, name, lastMessage, true, timestamp, avatarUrl, unreadCount))
+                                val isOnline = userSnap.child("online").getValue(Boolean::class.java) ?: false
+                                chatsList.add(ChatItem(peerId, name, lastMessage, isOnline, timestamp, avatarUrl, unreadCount))
                             } catch (e: Exception) {
                                 // Ignore
                             }
@@ -339,14 +344,39 @@ fun ChatListScreen(
                                 contentPadding = PaddingValues(bottom = 100.dp)
                             ) {
                                 items(chats) { chat ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { onChatClick(chat.id) }
-                                            .padding(horizontal = 20.dp, vertical = 14.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Box(
+                                    var swipeOffset by remember(chat.id) { mutableFloatStateOf(0f) }
+                                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = if (swipeOffset > 0) Alignment.CenterStart else Alignment.CenterEnd) {
+                                        if (kotlin.math.abs(swipeOffset) > 20f && chat.unreadCount > 0) {
+                                            Icon(Icons.Default.Check, contentDescription = "Read", tint = dimTextColor, modifier = Modifier.padding(horizontal = 24.dp).size(24.dp))
+                                        }
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .offset { androidx.compose.ui.unit.IntOffset(swipeOffset.toInt(), 0) }
+                                                .background(bgColor)
+                                                .pointerInput(Unit) {
+                                                    detectHorizontalDragGestures(
+                                                        onDragEnd = {
+                                                            if (kotlin.math.abs(swipeOffset) > 100f && chat.unreadCount > 0 && currentUser != null) {
+                                                                database.getReference("user_chats").child(currentUser.uid).child(chat.id).child("unreadCount").setValue(0)
+                                                            }
+                                                            swipeOffset = 0f
+                                                        },
+                                                        onDragCancel = { swipeOffset = 0f },
+                                                        onHorizontalDrag = { change: androidx.compose.ui.input.pointer.PointerInputChange, dragAmount: Float ->
+                                                            
+                                                            val newOffset = swipeOffset + dragAmount
+                                                            if (kotlin.math.abs(newOffset) <= 150f) {
+                                                                swipeOffset = newOffset
+                                                            }
+                                                        }
+                                                    )
+                                                }
+                                                .clickable { onChatClick(chat.id) }
+                                                .padding(horizontal = 20.dp, vertical = 14.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Box(
                                             modifier = Modifier
                                                 .size(48.dp)
                                                 .clip(RoundedCornerShape(16.dp))
@@ -368,7 +398,7 @@ fun ChatListScreen(
                                                     modifier = Modifier
                                                         .size(12.dp)
                                                         .clip(CircleShape)
-                                                        .background(SuccessGreen)
+                                                        .background(if (isDarkTheme) White else Black)
                                                         .border(2.dp, bgColor, CircleShape)
                                                         .align(Alignment.BottomEnd)
                                                 )
@@ -396,6 +426,7 @@ fun ChatListScreen(
                                                 )
                                             }
                                         }
+                                        } // End of Box
                                     }
                                 }
                             }
@@ -487,6 +518,9 @@ fun ChatListScreen(
                                                     } else {
                                                         Icon(Icons.Default.Person, contentDescription = null, tint = dimTextColor)
                                                     }
+                                                    if (user.isOnline) {
+                                                        Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(if (isDarkTheme) White else Black).border(2.dp, bgColor, CircleShape).align(Alignment.BottomEnd))
+                                                    }
                                                 }
                                                 Spacer(Modifier.width(16.dp))
                                                 Column {
@@ -566,6 +600,9 @@ fun ChatListScreen(
                                                     } else {
                                                         Icon(Icons.Default.Person, contentDescription = null, tint = dimTextColor)
                                                     }
+                                                    if (contact.isOnline) {
+                                                        Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(if (isDarkTheme) White else Black).border(2.dp, bgColor, CircleShape).align(Alignment.BottomEnd))
+                                                    }
                                                 }
                                                 Spacer(Modifier.width(16.dp))
                                                 Column {
@@ -618,11 +655,29 @@ fun ChatListScreen(
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 24.dp)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(if (isDarkTheme) Color(0xFF0F0F0F) else Color(0xFFEBEBEB))
-                        .border(1.dp, borderColor, RoundedCornerShape(24.dp))
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .padding(bottom = 16.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(if (isDarkTheme) Color(0xFF151515) else Color.White)
+                        .border(1.dp, borderColor.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                        .pointerInput(Unit) {
+                            var dragDistance = 0f
+                            detectHorizontalDragGestures(
+                                onDragStart = { dragDistance = 0f },
+                                onDragEnd = {
+                                    if (dragDistance > 100f && selectedDockTab > 0) {
+                                        selectedDockTab -= 1
+                                    } else if (dragDistance < -100f && selectedDockTab < 2) {
+                                        selectedDockTab += 1
+                                    }
+                                },
+                                onDragCancel = { dragDistance = 0f },
+                                onHorizontalDrag = { change: androidx.compose.ui.input.pointer.PointerInputChange, dragAmount: Float ->
+                                    
+                                    dragDistance += dragAmount
+                                }
+                            )
+                        }
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
                 ) {
                     val activeIcons = listOf(
                         Icons.AutoMirrored.Filled.Chat,
@@ -630,17 +685,25 @@ fun ChatListScreen(
                         Icons.Default.Group
                     )
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         activeIcons.forEachIndexed { index, icon ->
                             val isSelected = selectedDockTab == index
-                            IconButton(onClick = { selectedDockTab = index }) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .clickable { selectedDockTab = index }
+                                    .background(if (isSelected) surfaceColor else Color.Transparent)
+                                    .border(if (isSelected) 1.dp else 0.dp, if (isSelected) borderColor else Color.Transparent, RoundedCornerShape(16.dp))
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 Icon(
                                     imageVector = icon,
                                     contentDescription = "Tab $index",
                                     tint = if (isSelected) textColor else dimTextColor,
-                                    modifier = Modifier.size(if (isSelected) 26.dp else 22.dp)
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
                         }

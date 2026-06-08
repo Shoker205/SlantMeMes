@@ -115,19 +115,21 @@ object PushNotificationManager {
 
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         
+        notificationManager.notify(peerId.hashCode(), builder.build())
+        
         if (avatarUrl.isNotBlank()) {
             val loader = coil.ImageLoader(context)
             val request = coil.request.ImageRequest.Builder(context)
                 .data(avatarUrl)
                 .target { result ->
                     val bmp = (result as? android.graphics.drawable.BitmapDrawable)?.bitmap
-                    if (bmp != null) builder.setLargeIcon(bmp)
-                    notificationManager.notify(peerId.hashCode(), builder.build())
+                    if (bmp != null) {
+                        builder.setLargeIcon(bmp)
+                        notificationManager.notify(peerId.hashCode(), builder.build())
+                    }
                 }
                 .build()
             loader.enqueue(request)
-        } else {
-            notificationManager.notify(peerId.hashCode(), builder.build())
         }
     }
 }

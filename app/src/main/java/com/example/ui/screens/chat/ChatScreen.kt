@@ -36,6 +36,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.*
+import androidx.compose.foundation.gestures.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -111,8 +113,25 @@ fun ChatScreen(
     var showForwardDialog by remember { mutableStateOf(false) }
     var highlightedMessageId by remember { mutableStateOf<String?>(null) }
 
+    val currentUser = FirebaseAuth.getInstance().currentUser ?: return
+    val database = FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/")
+
     var recipientName by remember { mutableStateOf("User") }
     var recipientAvatar by remember { mutableStateOf("") }
+    var recipientOnline by remember { mutableStateOf(false) }
+    var recipientLastSeen by remember { mutableStateOf(0L) }
+    
+    LaunchedEffect(recipientId) {
+        database.getReference("users").child(recipientId).addValueEventListener(object : com.google.firebase.database.ValueEventListener {
+            override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
+                recipientName = snapshot.child("name").getValue(String::class.java) ?: "User"
+                recipientAvatar = snapshot.child("avatarUrl").getValue(String::class.java) ?: ""
+                recipientOnline = snapshot.child("online").getValue(Boolean::class.java) ?: false
+                recipientLastSeen = snapshot.child("lastSeen").getValue(Long::class.java) ?: 0L
+            }
+            override fun onCancelled(error: com.google.firebase.database.DatabaseError) {}
+        })
+    }
     
     DisposableEffect(recipientId) {
         PushNotificationManager.currentOpenedChatId = recipientId
@@ -122,9 +141,6 @@ fun ChatScreen(
             }
         }
     }
-    
-    val currentUser = FirebaseAuth.getInstance().currentUser ?: return
-    val database = FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/")
     
     val chatId = if (currentUser.uid < recipientId) "${currentUser.uid}_$recipientId" else "${recipientId}_${currentUser.uid}"
 
@@ -145,10 +161,6 @@ fun ChatScreen(
     var showAttachmentMenu by remember { mutableStateOf(false) }
 
     LaunchedEffect(recipientId) {
-        val userSnap = database.getReference("users").child(recipientId).get().await()
-        recipientName = userSnap.child("name").getValue(String::class.java) ?: "User"
-        recipientAvatar = userSnap.child("avatarUrl").getValue(String::class.java) ?: ""
-        
         // Listen to messages
         val messagesRef = database.getReference("chats").child(chatId).child("messages")
         messagesRef.addValueEventListener(object : ValueEventListener {
@@ -263,7 +275,15 @@ fun ChatScreen(
                                 }
                             }
                             Spacer(Modifier.width(12.dp))
-                            Text(recipientName, color = textColor, fontSize = 18.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                            Column {
+                                Text(recipientName, color = textColor, fontSize = 18.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                if (recipientOnline) {
+                                    Text("онлайн", color = Color(0xFF4FC3F7), fontSize = 12.sp)
+                                } else if (recipientLastSeen > 0L) {
+                                    val dateStr = java.text.SimpleDateFormat("HH:mm, dd MMM", java.util.Locale.getDefault()).format(java.util.Date(recipientLastSeen))
+                                    Text("был(а) $dateStr", color = dimTextColor, fontSize = 12.sp)
+                                }
+                            }
                         }
                     }
                 },
@@ -315,11 +335,36 @@ fun ChatScreen(
                     val isMine = msg.senderId == currentUser.uid
                     val isSelected = selectedMessages.contains(msg.id)
                     val isHighlighted = highlightedMessageId == msg.id
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(if (isSelected) textColor.copy(alpha = 0.3f) else if (isHighlighted) textColor.copy(alpha = 0.15f) else Color.Transparent)
-                            .combinedClickable(
+                    var swipeOffset by remember { mutableFloatStateOf(0f) }
+                    
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                        if (swipeOffset < -20f) {
+                            Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = "Reply", tint = dimTextColor, modifier = Modifier.padding(end = 16.dp).size(24.dp).scale(scaleX = -1f, scaleY = 1f))
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .offset { androidx.compose.ui.unit.IntOffset(swipeOffset.toInt(), 0) }
+                                .background(if (isSelected) textColor.copy(alpha = 0.3f) else if (isHighlighted) textColor.copy(alpha = 0.15f) else Color.Transparent)
+                                .pointerInput(Unit) {
+                                    detectHorizontalDragGestures(
+                                        onDragEnd = {
+                                            if (swipeOffset < -100f) {
+                                                replyToMessage = msg
+                                            }
+                                            swipeOffset = 0f
+                                        },
+                                        onDragCancel = { swipeOffset = 0f },
+                                        onHorizontalDrag = { change: androidx.compose.ui.input.pointer.PointerInputChange, dragAmount: Float ->
+                                            
+                                            val newOffset = swipeOffset + dragAmount
+                                            if (newOffset <= 0f && newOffset >= -150f) {
+                                                swipeOffset = newOffset
+                                            }
+                                        }
+                                    )
+                                }
+                                .combinedClickable(
                                 onClick = {
                                     if (selectedMessages.isNotEmpty()) {
                                         if (isSelected) selectedMessages -= msg.id
@@ -442,10 +487,11 @@ fun ChatScreen(
                             }
                         }
                     }
-                }
+                } // Box end
             }
+        }
 
-            // Input Bar
+        // Input Bar
             Box(
                 modifier = Modifier
                     .fillMaxWidth()

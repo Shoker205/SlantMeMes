@@ -8,11 +8,19 @@ import com.example.ui.screens.auth.AuthScreen
 import com.example.ui.screens.chat.ChatListScreen
 import com.google.firebase.auth.FirebaseAuth
 import com.example.ui.screens.profile.ProfileScreen
+import androidx.compose.runtime.LaunchedEffect
 
 @Composable
 fun MainAppNavigation() {
     val navController = rememberNavController()
-    val startDest = if (FirebaseAuth.getInstance().currentUser != null) "chat_list" else "auth"
+    val authUser = FirebaseAuth.getInstance().currentUser
+    val startDest = if (authUser != null) "chat_list" else "auth"
+
+    LaunchedEffect(authUser?.uid) {
+        if (authUser != null) {
+            PresenceManager.init()
+        }
+    }
 
     NavHost(navController = navController, startDestination = startDest) {
         composable("auth") {
