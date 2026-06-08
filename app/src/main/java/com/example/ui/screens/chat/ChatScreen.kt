@@ -28,6 +28,15 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.graphics.SolidColor
+import kotlinx.coroutines.isActive
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -545,9 +554,9 @@ fun ChatScreen(
                         }
                     }
                     Row(verticalAlignment = Alignment.Bottom) {
-                    Box {
+                    Box(modifier = Modifier.padding(bottom = 4.dp)) {
                         IconButton(onClick = { showAttachmentMenu = !showAttachmentMenu }) {
-                            Icon(Icons.Default.AttachFile, contentDescription = "Attach", tint = dimTextColor)
+                            Icon(Icons.Default.Add, contentDescription = "Attach", tint = dimTextColor, modifier = Modifier.size(28.dp).clip(CircleShape).background(surfaceColor))
                         }
                         DropdownMenu(
                             expanded = showAttachmentMenu,
@@ -579,90 +588,187 @@ fun ChatScreen(
                     
                     val ctx = androidx.compose.ui.platform.LocalContext.current
                     var isRecording by remember { mutableStateOf(false) }
+                    var isRecordingLocked by remember { mutableStateOf(false) }
                     var recordSlideOffset by remember { mutableFloatStateOf(0f) }
+                    var recordSlideYOffset by remember { mutableFloatStateOf(0f) }
+                    var recordingSeconds by remember { mutableIntStateOf(0) }
+                    
+                    LaunchedEffect(isRecording) {
+                        if (isRecording) {
+                            recordingSeconds = 0
+                            while (isActive) {
+                                kotlinx.coroutines.delay(1000)
+                                recordingSeconds++
+                            }
+                        }
+                    }
                     
                     if (isRecording) {
                         Row(
-                            modifier = Modifier.weight(1f).padding(end = 8.dp).height(48.dp).background(bgColor, RoundedCornerShape(24.dp)),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Spacer(Modifier.width(16.dp))
-                            Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(Color.Red))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Запись...", color = textColor, fontSize = 14.sp)
-                            Spacer(Modifier.weight(1f))
-                            Text("< Отмените свайпом", color = dimTextColor, fontSize = 12.sp, modifier = Modifier.offset { androidx.compose.ui.unit.IntOffset(recordSlideOffset.toInt(), 0) })
-                            Spacer(Modifier.width(16.dp))
-                        }
-                    } else {
-                        OutlinedTextField(
-                            value = inputText,
-                            onValueChange = { inputText = it },
                             modifier = Modifier
                                 .weight(1f)
-                                .padding(end = 8.dp),
-                            placeholder = { Text("Сообщение...", color = dimTextColor) },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = bgColor,
-                                unfocusedContainerColor = bgColor,
-                                focusedBorderColor = Color.Transparent,
-                                unfocusedBorderColor = Color.Transparent,
-                                focusedTextColor = textColor,
-                                unfocusedTextColor = textColor
-                            ),
-                            shape = RoundedCornerShape(24.dp),
-                            maxLines = 5
-                        )
-                    }
-                    
-                    Box(
-                        modifier = Modifier
-                            .offset { androidx.compose.ui.unit.IntOffset(recordSlideOffset.toInt(), 0) }
-                            .clip(CircleShape)
-                            .background(textColor)
-                            .size(if (isRecording) 56.dp else 48.dp)
-                            .pointerInput(inputText) {
-                                if (inputText.isNotBlank()) {
-                                    detectTapGestures {
-                                        sendMessage(inputText.trim(), "text")
-                                        inputText = ""
-                                    }
-                                } else {
-                                    detectDragGestures(
-                                        onDragStart = { 
-                                            // Request permissions in real app, start recording
-                                            isRecording = true 
-                                        },
-                                        onDragEnd = {
-                                            if (recordSlideOffset < -150f) {
-                                                // Cancel
-                                            } else {
-                                                // Send
-                                                android.widget.Toast.makeText(ctx, "Голосовое сообщение в разработке", android.widget.Toast.LENGTH_SHORT).show()
-                                            }
-                                            isRecording = false
-                                            recordSlideOffset = 0f
-                                        },
-                                        onDragCancel = {
-                                            isRecording = false
-                                            recordSlideOffset = 0f
-                                        },
-                                        onDrag = { change, dragAmount ->
-                                            change.consume()
-                                            val newOffset = recordSlideOffset + dragAmount.x
-                                            if (newOffset <= 0f) {
-                                                recordSlideOffset = newOffset
-                                            }
-                                        }
+                                .padding(end = 8.dp)
+                                .height(48.dp)
+                                .background(bgColor, RoundedCornerShape(24.dp)),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (isRecordingLocked) {
+                                IconButton(onClick = {
+                                    isRecording = false
+                                    isRecordingLocked = false
+                                }) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.Red)
+                                }
+                            } else {
+                                Spacer(Modifier.width(16.dp))
+                                Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(Color.Red))
+                            }
+                            
+                            Spacer(Modifier.width(8.dp))
+                            val min = recordingSeconds / 60
+                            val sec = recordingSeconds % 60
+                            Text(String.format(java.util.Locale.US, "%d:%02d", min, sec), color = textColor, fontSize = 14.sp)
+                            
+                            val infiniteTransition = rememberInfiniteTransition()
+                            val wavePhase by infiniteTransition.animateFloat(initialValue = 0f, targetValue = 2 * Math.PI.toFloat(), animationSpec = infiniteRepeatable(animation = tween(1000, easing = LinearEasing), repeatMode = RepeatMode.Restart), label = "")
+                            
+                            Canvas(modifier = Modifier.weight(1f).height(24.dp).padding(horizontal = 8.dp)) {
+                                val barWidth = 3.dp.toPx()
+                                val space = 2.dp.toPx()
+                                val bars = (size.width / (barWidth + space)).toInt()
+                                for (i in 0 until bars) {
+                                    val x = i * (barWidth + space)
+                                    val phaseOffset = i * 0.3f
+                                    val normalizedSine = (kotlin.math.sin(wavePhase + phaseOffset) + 1) / 2
+                                    val barHeight = (size.height * 0.3f) + (size.height * 0.7f) * normalizedSine
+                                    drawRect(
+                                        color = Color(0xFF4FC3F7),
+                                        topLeft = Offset(x, (size.height - barHeight.toFloat()) / 2),
+                                        size = Size(barWidth, barHeight.toFloat())
                                     )
                                 }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (inputText.isNotBlank()) {
-                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = bgColor)
-                        } else {
-                            Icon(Icons.Default.Mic, contentDescription = "Record Voice", tint = bgColor)
+                            }
+
+                            if (!isRecordingLocked) {
+                                Text("< Отмените свайпом", color = dimTextColor, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.offset { androidx.compose.ui.unit.IntOffset(recordSlideOffset.toInt(), 0) })
+                                Spacer(Modifier.width(16.dp))
+                            } else {
+                                IconButton(onClick = {
+                                    android.widget.Toast.makeText(ctx, "Голосовое отправлено", android.widget.Toast.LENGTH_SHORT).show()
+                                    isRecording = false
+                                    isRecordingLocked = false
+                                }) {
+                                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Color(0xFF4FC3F7))
+                                }
+                            }
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 8.dp)
+                                .defaultMinSize(minHeight = 40.dp)
+                                .background(bgColor, RoundedCornerShape(20.dp))
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            BasicTextField(
+                                value = inputText,
+                                onValueChange = { inputText = it },
+                                textStyle = androidx.compose.ui.text.TextStyle(color = textColor, fontSize = 16.sp),
+                                maxLines = 5,
+                                modifier = Modifier.weight(1f),
+                                decorationBox = { innerTextField ->
+                                    if (inputText.isEmpty()) {
+                                        Text("Сообщение...", color = dimTextColor, fontSize = 16.sp)
+                                    }
+                                    innerTextField()
+                                },
+                                cursorBrush = SolidColor(if (isDarkTheme) Color.White else Color.Black)
+                            )
+                        }
+                    }
+                    
+                    val micButtonSize = if (isRecording && !isRecordingLocked) 64.dp else 48.dp
+                    Box(modifier = Modifier.padding(bottom = if (isRecording && !isRecordingLocked) 0.dp else 4.dp)) {
+                        if (isRecording && !isRecordingLocked && recordSlideYOffset < -20f) {
+                            Box(modifier = Modifier.offset(x = 16.dp, y = (-60).dp).background(surfaceColor, CircleShape).padding(8.dp)) {
+                                Icon(Icons.Default.Lock, contentDescription = "Lock", tint = dimTextColor, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .offset { androidx.compose.ui.unit.IntOffset(
+                                    if (!isRecordingLocked) recordSlideOffset.toInt() else 0,
+                                    if (!isRecordingLocked) recordSlideYOffset.toInt() else 0
+                                ) }
+                                .clip(CircleShape)
+                                .background(if (isRecordingLocked) Color.Red.copy(alpha = 0.2f) else textColor)
+                                .size(micButtonSize)
+                                .pointerInput(inputText, isRecordingLocked) {
+                                    if (inputText.isNotBlank()) {
+                                        detectTapGestures {
+                                            sendMessage(inputText.trim(), "text")
+                                            inputText = ""
+                                        }
+                                    } else if (isRecordingLocked) {
+                                        detectTapGestures {
+                                            isRecording = false
+                                            isRecordingLocked = false
+                                        }
+                                    } else {
+                                        detectDragGestures(
+                                            onDragStart = { 
+                                                isRecording = true 
+                                                recordSlideOffset = 0f
+                                                recordSlideYOffset = 0f
+                                            },
+                                            onDragEnd = {
+                                                if (recordSlideOffset < -100f) {
+                                                    isRecording = false // Cancel
+                                                } else if (recordSlideYOffset < -100f) {
+                                                    isRecordingLocked = true // Lock
+                                                    recordSlideYOffset = 0f
+                                                    recordSlideOffset = 0f
+                                                } else {
+                                                    android.widget.Toast.makeText(ctx, "Голосовое отправлено", android.widget.Toast.LENGTH_SHORT).show()
+                                                    isRecording = false
+                                                }
+                                                if (!isRecordingLocked) {
+                                                    recordSlideOffset = 0f
+                                                    recordSlideYOffset = 0f
+                                                }
+                                            },
+                                            onDragCancel = {
+                                                isRecording = false
+                                                isRecordingLocked = false
+                                                recordSlideOffset = 0f
+                                                recordSlideYOffset = 0f
+                                            },
+                                            onDrag = { change, dragAmount ->
+                                                change.consume()
+                                                if (!isRecordingLocked) {
+                                                    val newX = recordSlideOffset + dragAmount.x
+                                                    val newY = recordSlideYOffset + dragAmount.y
+                                                    if (kotlin.math.abs(newX) > kotlin.math.abs(newY * 1.5f) && newX < 0f) {
+                                                        recordSlideOffset = newX
+                                                    } else if (newY < 0f) {
+                                                        recordSlideYOffset = newY
+                                                    }
+                                                }
+                                            }
+                                        )
+                                    }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (inputText.isNotBlank()) {
+                                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = bgColor, modifier = Modifier.size(24.dp))
+                            } else if (isRecordingLocked) {
+                                Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.Red, modifier = Modifier.size(24.dp))
+                            } else {
+                                Icon(Icons.Default.Mic, contentDescription = "Record Voice", tint = bgColor, modifier = Modifier.size(if (isRecording) 32.dp else 24.dp))
+                            }
                         }
                     }
                 }
