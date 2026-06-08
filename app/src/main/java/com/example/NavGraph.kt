@@ -9,12 +9,25 @@ import com.example.ui.screens.chat.ChatListScreen
 import com.google.firebase.auth.FirebaseAuth
 import com.example.ui.screens.profile.ProfileScreen
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import android.app.Activity
 
 @Composable
 fun MainAppNavigation() {
     val navController = rememberNavController()
     val authUser = FirebaseAuth.getInstance().currentUser
     val startDest = if (authUser != null) "chat_list" else "auth"
+
+    val context = LocalContext.current
+    val activity = context as? Activity
+
+    LaunchedEffect(activity?.intent) {
+        val chatId = activity?.intent?.getStringExtra("chatId")
+        if (chatId != null && authUser != null) {
+            navController.navigate("chat/$chatId")
+            activity.intent?.removeExtra("chatId")
+        }
+    }
 
     LaunchedEffect(authUser?.uid) {
         if (authUser != null) {

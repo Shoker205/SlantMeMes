@@ -26,6 +26,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -275,8 +277,8 @@ fun ChatScreen(
                                 }
                             }
                             Spacer(Modifier.width(12.dp))
-                            Column {
-                                Text(recipientName, color = textColor, fontSize = 18.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                            Column(verticalArrangement = Arrangement.Center) {
+                                Text(recipientName, color = textColor, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                                 if (recipientOnline) {
                                     Text("онлайн", color = Color(0xFF4FC3F7), fontSize = 12.sp)
                                 } else if (recipientLastSeen > 0L) {
@@ -461,6 +463,16 @@ fun ChatScreen(
                                                         Icon(Icons.Default.Videocam, contentDescription = "Video", tint = Color.White, modifier = Modifier.size(48.dp))
                                                     }
                                                 }
+                                                val ctx = androidx.compose.ui.platform.LocalContext.current
+                                                IconButton(
+                                                    onClick = { 
+                                                        // A real app would download using OkHttp/DownloadManager here
+                                                        android.widget.Toast.makeText(ctx, "Сохранено в кэш", android.widget.Toast.LENGTH_SHORT).show()
+                                                    },
+                                                    modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).background(Color.Black.copy(alpha=0.4f), CircleShape).size(28.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Download, contentDescription = "Download", tint = Color.White, modifier = Modifier.size(16.dp))
+                                                }
                                             }
                                             Spacer(Modifier.height(4.dp))
                                         }
@@ -565,38 +577,93 @@ fun ChatScreen(
                         }
                     }
                     
-                    OutlinedTextField(
-                        value = inputText,
-                        onValueChange = { inputText = it },
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 8.dp),
-                        placeholder = { Text("Сообщение...", color = dimTextColor) },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = bgColor,
-                            unfocusedContainerColor = bgColor,
-                            focusedBorderColor = Color.Transparent,
-                            unfocusedBorderColor = Color.Transparent,
-                            focusedTextColor = textColor,
-                            unfocusedTextColor = textColor
-                        ),
-                        shape = RoundedCornerShape(24.dp),
-                        maxLines = 5
-                    )
+                    val ctx = androidx.compose.ui.platform.LocalContext.current
+                    var isRecording by remember { mutableStateOf(false) }
+                    var recordSlideOffset by remember { mutableFloatStateOf(0f) }
                     
-                    IconButton(
-                        onClick = {
-                            if (inputText.isNotBlank()) {
-                                sendMessage(inputText.trim(), "text")
-                                inputText = ""
-                            }
-                        },
+                    if (isRecording) {
+                        Row(
+                            modifier = Modifier.weight(1f).padding(end = 8.dp).height(48.dp).background(bgColor, RoundedCornerShape(24.dp)),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Spacer(Modifier.width(16.dp))
+                            Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(Color.Red))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Запись...", color = textColor, fontSize = 14.sp)
+                            Spacer(Modifier.weight(1f))
+                            Text("< Отмените свайпом", color = dimTextColor, fontSize = 12.sp, modifier = Modifier.offset { androidx.compose.ui.unit.IntOffset(recordSlideOffset.toInt(), 0) })
+                            Spacer(Modifier.width(16.dp))
+                        }
+                    } else {
+                        OutlinedTextField(
+                            value = inputText,
+                            onValueChange = { inputText = it },
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 8.dp),
+                            placeholder = { Text("Сообщение...", color = dimTextColor) },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = bgColor,
+                                unfocusedContainerColor = bgColor,
+                                focusedBorderColor = Color.Transparent,
+                                unfocusedBorderColor = Color.Transparent,
+                                focusedTextColor = textColor,
+                                unfocusedTextColor = textColor
+                            ),
+                            shape = RoundedCornerShape(24.dp),
+                            maxLines = 5
+                        )
+                    }
+                    
+                    Box(
                         modifier = Modifier
+                            .offset { androidx.compose.ui.unit.IntOffset(recordSlideOffset.toInt(), 0) }
                             .clip(CircleShape)
                             .background(textColor)
-                            .size(48.dp)
+                            .size(if (isRecording) 56.dp else 48.dp)
+                            .pointerInput(inputText) {
+                                if (inputText.isNotBlank()) {
+                                    detectTapGestures {
+                                        sendMessage(inputText.trim(), "text")
+                                        inputText = ""
+                                    }
+                                } else {
+                                    detectDragGestures(
+                                        onDragStart = { 
+                                            // Request permissions in real app, start recording
+                                            isRecording = true 
+                                        },
+                                        onDragEnd = {
+                                            if (recordSlideOffset < -150f) {
+                                                // Cancel
+                                            } else {
+                                                // Send
+                                                android.widget.Toast.makeText(ctx, "Голосовое сообщение в разработке", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                            isRecording = false
+                                            recordSlideOffset = 0f
+                                        },
+                                        onDragCancel = {
+                                            isRecording = false
+                                            recordSlideOffset = 0f
+                                        },
+                                        onDrag = { change, dragAmount ->
+                                            change.consume()
+                                            val newOffset = recordSlideOffset + dragAmount.x
+                                            if (newOffset <= 0f) {
+                                                recordSlideOffset = newOffset
+                                            }
+                                        }
+                                    )
+                                }
+                            },
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = bgColor)
+                        if (inputText.isNotBlank()) {
+                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = bgColor)
+                        } else {
+                            Icon(Icons.Default.Mic, contentDescription = "Record Voice", tint = bgColor)
+                        }
                     }
                 }
                 }

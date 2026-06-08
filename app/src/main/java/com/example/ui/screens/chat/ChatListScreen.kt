@@ -376,7 +376,7 @@ fun ChatListScreen(
                                                 .padding(horizontal = 20.dp, vertical = 14.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Box(
+                                        Box(
                                             modifier = Modifier
                                                 .size(48.dp)
                                                 .clip(RoundedCornerShape(16.dp))
@@ -393,20 +393,21 @@ fun ChatListScreen(
                                             } else {
                                                 Text(chat.name.take(1), color = textColor, fontWeight = FontWeight.Bold)
                                             }
-                                            if (chat.isOnline) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(12.dp)
-                                                        .clip(CircleShape)
-                                                        .background(if (isDarkTheme) White else Black)
-                                                        .border(2.dp, bgColor, CircleShape)
-                                                        .align(Alignment.BottomEnd)
-                                                )
-                                            }
                                         }
                                         Spacer(modifier = Modifier.width(14.dp))
                                         Column(modifier = Modifier.weight(1f)) {
-                                            Text(chat.name, color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(chat.name, color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                                                if (chat.isOnline) {
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(8.dp)
+                                                            .clip(CircleShape)
+                                                            .background(Color(0xFF4FC3F7))
+                                                    )
+                                                }
+                                            }
                                             Text(chat.lastMessage, color = dimTextColor, fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                                         }
                                         if (chat.unreadCount > 0) {
@@ -518,13 +519,16 @@ fun ChatListScreen(
                                                     } else {
                                                         Icon(Icons.Default.Person, contentDescription = null, tint = dimTextColor)
                                                     }
-                                                    if (user.isOnline) {
-                                                        Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(if (isDarkTheme) White else Black).border(2.dp, bgColor, CircleShape).align(Alignment.BottomEnd))
-                                                    }
                                                 }
                                                 Spacer(Modifier.width(16.dp))
                                                 Column {
-                                                    Text(user.name, color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Text(user.name, color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                                                        if (user.isOnline) {
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF4FC3F7)))
+                                                        }
+                                                    }
                                                     Text("@${user.username}", color = dimTextColor, fontSize = 12.sp)
                                                 }
                                             }
@@ -600,13 +604,16 @@ fun ChatListScreen(
                                                     } else {
                                                         Icon(Icons.Default.Person, contentDescription = null, tint = dimTextColor)
                                                     }
-                                                    if (contact.isOnline) {
-                                                        Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(if (isDarkTheme) White else Black).border(2.dp, bgColor, CircleShape).align(Alignment.BottomEnd))
-                                                    }
                                                 }
                                                 Spacer(Modifier.width(16.dp))
                                                 Column {
-                                                    Text(contact.name, color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Text(contact.name, color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                                                        if (contact.isOnline) {
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF4FC3F7)))
+                                                        }
+                                                    }
                                                     Text("@${contact.username}", color = dimTextColor, fontSize = 12.sp)
                                                 }
                                             }
