@@ -19,16 +19,6 @@ import com.google.accompanist.permissions.rememberPermissionState
 import androidx.compose.runtime.LaunchedEffect
 
 class MainActivity : ComponentActivity() {
-  override fun onResume() {
-      super.onResume()
-      PushNotificationManager.isAppInForeground = true
-  }
-
-  override fun onPause() {
-      super.onPause()
-      PushNotificationManager.isAppInForeground = false
-  }
-
   @OptIn(ExperimentalPermissionsApi::class)
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)

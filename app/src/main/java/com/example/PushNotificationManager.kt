@@ -13,7 +13,7 @@ import com.google.firebase.database.*
 object PushNotificationManager {
     private const val CHANNEL_ID = "chat_messages_channel"
     private var isInitialized = false
-    var isAppInForeground = false
+    var currentOpenedChatId: String? = null
     private var lastObservedTimestamps = mutableMapOf<String, Long>()
 
     fun init(context: Context) {
@@ -38,7 +38,7 @@ object PushNotificationManager {
 
                     // If we already know about this chat and the timestamp is newer, it's a new message
                     if (previousTimestamp != null && timestamp > previousTimestamp) {
-                        if (lastMessage.isNotBlank() && lastSenderId != currentUser.uid && !isAppInForeground) {
+                        if (lastMessage.isNotBlank() && lastSenderId != currentUser.uid && peerId != currentOpenedChatId) {
                             database.getReference("users").child(peerId).get().addOnSuccessListener { userSnap ->
                                 val name = userSnap.child("name").getValue(String::class.java) ?: "User"
                                 val avatarUrl = userSnap.child("avatarUrl").getValue(String::class.java) ?: ""

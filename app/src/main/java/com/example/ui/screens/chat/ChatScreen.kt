@@ -1,6 +1,7 @@
 package com.example.ui.screens.chat
 
 import android.net.Uri
+import com.example.PushNotificationManager
 import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -88,6 +89,7 @@ data class ChatMessage(
     val type: String = "text",
     val timestamp: Long = 0L,
     val mediaUrl: String = "",
+    val replyToMsgId: String? = null,
     val isRead: Boolean = false
 )
 
@@ -106,9 +108,20 @@ fun ChatScreen(
     var replyToMessage by remember { mutableStateOf<ChatMessage?>(null) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var messageToDelete by remember { mutableStateOf<ChatMessage?>(null) }
+    var showForwardDialog by remember { mutableStateOf(false) }
+    var highlightedMessageId by remember { mutableStateOf<String?>(null) }
 
     var recipientName by remember { mutableStateOf("User") }
     var recipientAvatar by remember { mutableStateOf("") }
+    
+    DisposableEffect(recipientId) {
+        PushNotificationManager.currentOpenedChatId = recipientId
+        onDispose {
+            if (PushNotificationManager.currentOpenedChatId == recipientId) {
+                PushNotificationManager.currentOpenedChatId = null
+            }
+        }
+    }
     
     val currentUser = FirebaseAuth.getInstance().currentUser ?: return
     val database = FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/")
@@ -148,11 +161,12 @@ fun ChatScreen(
                     val type = child.child("type").getValue(String::class.java) ?: "text"
                     val timestamp = child.child("timestamp").getValue(Long::class.java) ?: 0L
                     val mediaUrl = child.child("mediaUrl").getValue(String::class.java) ?: ""
+                    val replyToMsgId = child.child("replyToMsgId").getValue(String::class.java)
                     val isRead = child.child("isRead").getValue(Boolean::class.java) ?: false
                     
                     val decryptedText = if (type == "text") ChatCrypto.decrypt(encryptedText, chatId) else encryptedText
                     
-                    newMessages.add(ChatMessage(id, senderId, decryptedText, type, timestamp, mediaUrl, isRead))
+                    newMessages.add(ChatMessage(id, senderId, decryptedText, type, timestamp, mediaUrl, replyToMsgId, isRead))
                     
                     if (senderId != currentUser.uid && !isRead) {
                         child.ref.child("isRead").setValue(true)
@@ -172,8 +186,7 @@ fun ChatScreen(
         val messagesRef = database.getReference("chats").child(chatId).child("messages")
         
         val encryptedText = if (type == "text") {
-            val prefix = if (replyToMessage != null) "В ответ на: ${replyToMessage?.text?.take(20)}...\n" else ""
-            ChatCrypto.encrypt(prefix + text, chatId)
+            ChatCrypto.encrypt(text, chatId)
         } else text
         
         if (messageToEdit != null) {
@@ -181,7 +194,15 @@ fun ChatScreen(
             messageToEdit = null
         } else {
             val newMsgId = messagesRef.push().key ?: return
-            val msg = ChatMessage(newMsgId, currentUser.uid, encryptedText, type, System.currentTimeMillis(), mediaUrl)
+            val msg = ChatMessage(
+                id = newMsgId,
+                senderId = currentUser.uid,
+                text = encryptedText,
+                type = type,
+                timestamp = System.currentTimeMillis(),
+                mediaUrl = mediaUrl,
+                replyToMsgId = replyToMessage?.id
+            )
             messagesRef.child(newMsgId).setValue(msg)
             
             val chatMetaMe = mapOf(
@@ -259,7 +280,7 @@ fun ChatScreen(
                 },
                 actions = {
                     if (selectedMessages.isNotEmpty()) {
-                        IconButton(onClick = { selectedMessages = emptySet() }) {
+                        IconButton(onClick = { showForwardDialog = true }) {
                             Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = "Forward", tint = textColor, modifier = Modifier.scale(scaleX = -1f, scaleY = 1f))
                         }
                         IconButton(onClick = { 
@@ -293,10 +314,11 @@ fun ChatScreen(
                 items(messages) { msg ->
                     val isMine = msg.senderId == currentUser.uid
                     val isSelected = selectedMessages.contains(msg.id)
+                    val isHighlighted = highlightedMessageId == msg.id
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(if (isSelected) textColor.copy(alpha = 0.1f) else Color.Transparent)
+                            .background(if (isSelected) textColor.copy(alpha = 0.3f) else if (isHighlighted) textColor.copy(alpha = 0.15f) else Color.Transparent)
                             .combinedClickable(
                                 onClick = {
                                     if (selectedMessages.isNotEmpty()) {
@@ -335,6 +357,38 @@ fun ChatScreen(
                                 .background(if (isMine) bubbleSentBgColor else bubbleReceivedColor)
                                 .padding(horizontal = 14.dp, vertical = 10.dp)
                         ) {
+                            if (msg.replyToMsgId != null) {
+                                val replyMsg = messages.find { it.id == msg.replyToMsgId }
+                                if (replyMsg != null) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(bottom = 6.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(textColor.copy(alpha = 0.05f))
+                                            .clickable {
+                                                highlightedMessageId = replyMsg.id
+                                                val index = messages.indexOf(replyMsg)
+                                                if (index != -1) {
+                                                    scope.launch { listState.animateScrollToItem(index) }
+                                                    scope.launch {
+                                                        kotlinx.coroutines.delay(1500)
+                                                        if (highlightedMessageId == replyMsg.id) highlightedMessageId = null
+                                                    }
+                                                }
+                                            }
+                                            .padding(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(modifier = Modifier.width(3.dp).height(24.dp).background(Color(0xFF4FC3F7), RoundedCornerShape(1.dp)))
+                                        Spacer(Modifier.width(6.dp))
+                                        Column {
+                                            Text(if (replyMsg.senderId == currentUser.uid) "Вы" else recipientName, color = Color(0xFF4FC3F7), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            Text(replyMsg.text, color = if (isMine) bubbleSentContentColor else textColor, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                        }
+                                    }
+                                }
+                            }
                             when (msg.type) {
                                 "text" -> {
                                     Text(
@@ -527,6 +581,7 @@ fun ChatScreen(
                     leadingContent = { Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null, tint = textColor, modifier = Modifier.scale(scaleX = -1f, scaleY = 1f)) },
                     modifier = Modifier.clickable {
                         selectedMessages = setOf(msg.id)
+                        showForwardDialog = true
                         contextMenuMessage = null
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
@@ -612,5 +667,85 @@ fun ChatScreen(
             },
             containerColor = surfaceColor
         )
+    }
+
+    if (showForwardDialog) {
+        var chats by remember { mutableStateOf<List<Map<String, String>>>(emptyList()) }
+        LaunchedEffect(Unit) {
+            database.getReference("user_chats").child(currentUser.uid).get().addOnSuccessListener { snapshot ->
+                val list = mutableListOf<Map<String, String>>()
+                for (child in snapshot.children) {
+                    val peerId = child.key ?: continue
+                    list.add(mapOf("id" to peerId))
+                }
+                chats = list
+            }
+        }
+        
+        ModalBottomSheet(
+            onDismissRequest = { showForwardDialog = false },
+            containerColor = surfaceColor
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp)) {
+                Text("Переслать в...", color = textColor, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
+                androidx.compose.foundation.lazy.LazyColumn {
+                    items(chats) { chatMap ->
+                        val peerId = chatMap["id"] ?: return@items
+                        var peerName by remember { mutableStateOf("User") }
+                        var peerAvatar by remember { mutableStateOf("") }
+                        
+                        LaunchedEffect(peerId) {
+                            database.getReference("users").child(peerId).get().addOnSuccessListener { snap ->
+                                peerName = snap.child("name").getValue(String::class.java) ?: "User"
+                                peerAvatar = snap.child("avatarUrl").getValue(String::class.java) ?: ""
+                            }
+                        }
+                        
+                        ListItem(
+                            headlineContent = { Text(peerName, color = textColor) },
+                            leadingContent = {
+                                Box(modifier = Modifier.size(40.dp).clip(CircleShape).background(Color.Gray)) {
+                                    if (peerAvatar.isNotBlank()) {
+                                        com.example.ui.components.AvatarImage(avatarUrl = peerAvatar, contentDescription = null, modifier = Modifier.fillMaxSize())
+                                    }
+                                }
+                            },
+                            modifier = Modifier.clickable {
+                                val selectedMsgs = messages.filter { selectedMessages.contains(it.id) }
+                                val targetChatId = if (currentUser.uid < peerId) currentUser.uid + "_" + peerId else peerId + "_" + currentUser.uid
+                                val targetRef = database.getReference("chats").child(targetChatId).child("messages")
+                                
+                                selectedMsgs.forEach { originalMsg ->
+                                    val newMsgId = targetRef.push().key ?: return@forEach
+                                    val decryptedOriginalText = if (originalMsg.type == "text") {
+                                        if (!originalMsg.text.startsWith("[")) {
+                                            try { com.example.ui.screens.chat.ChatCrypto.decrypt(originalMsg.text, chatId) } catch (e: Exception) { originalMsg.text }
+                                        } else originalMsg.text
+                                    } else originalMsg.text
+                                    
+                                    val fwdPrefix = "Переслано:\n" + decryptedOriginalText
+                                    val finalEncrypted = if (originalMsg.type == "text") com.example.ui.screens.chat.ChatCrypto.encrypt(fwdPrefix, targetChatId) else originalMsg.text
+                                    
+                                    val msg = ChatMessage(id = newMsgId, senderId = currentUser.uid, text = finalEncrypted, type = originalMsg.type, timestamp = System.currentTimeMillis(), mediaUrl = originalMsg.mediaUrl)
+                                    targetRef.child(newMsgId).setValue(msg)
+                                    
+                                    val chatMetaMe = mapOf("lastMessage" to (if (originalMsg.type == "text") finalEncrypted else "[${originalMsg.type}]"), "timestamp" to System.currentTimeMillis(), "lastSenderId" to currentUser.uid)
+                                    database.getReference("user_chats").child(currentUser.uid).child(peerId).updateChildren(chatMetaMe)
+                                    
+                                    database.getReference("user_chats").child(peerId).child(currentUser.uid).get().addOnSuccessListener { snap ->
+                                        val u = snap.child("unreadCount").getValue(Int::class.java) ?: 0
+                                        val chatMetaThem = mapOf("lastMessage" to (if (originalMsg.type == "text") finalEncrypted else "[${originalMsg.type}]"), "timestamp" to System.currentTimeMillis(), "lastSenderId" to currentUser.uid, "unreadCount" to u + 1)
+                                        database.getReference("user_chats").child(peerId).child(currentUser.uid).updateChildren(chatMetaThem)
+                                    }
+                                }
+                                showForwardDialog = false
+                                selectedMessages = emptySet()
+                            },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                        )
+                    }
+                }
+            }
+        }
     }
 }

@@ -468,6 +468,16 @@ fun AuthScreen(
                                             val user = FirebaseAuth.getInstance().currentUser
                                             if (user != null) {
                                                 val db = FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/").getReference("users").child(user.uid)
+                                                var finalAvatarUrl = ""
+                                                if (profileAvatarUri != null) {
+                                                    try {
+                                                        val storageRef = com.google.firebase.storage.FirebaseStorage.getInstance().getReference("avatars/${user.uid}.jpg")
+                                                        storageRef.putFile(profileAvatarUri!!).await()
+                                                        finalAvatarUrl = storageRef.downloadUrl.await().toString()
+                                                    } catch (e: Exception) {
+                                                        e.printStackTrace()
+                                                    }
+                                                }
                                                 val userData = mapOf(
                                                     "uid" to user.uid,
                                                     "email" to user.email,
@@ -475,7 +485,8 @@ fun AuthScreen(
                                                     "username" to profileUsername,
                                                     "bio" to profileBio,
                                                     "gender" to profileGender,
-                                                    "birthday" to profileBirthday
+                                                    "birthday" to profileBirthday,
+                                                    "avatarUrl" to finalAvatarUrl
                                                 )
                                                 db.setValue(userData).await()
                                                 showToast(s("ЛИЧНОСТЬ СОЗДАНА", "IDENTITY CREATED"), true)
