@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.text.BasicTextField
@@ -123,6 +124,11 @@ fun ChatScreen(
     var messageToDelete by remember { mutableStateOf<ChatMessage?>(null) }
     var showForwardDialog by remember { mutableStateOf(false) }
     var highlightedMessageId by remember { mutableStateOf<String?>(null) }
+    var initialMediaIndex by remember { mutableIntStateOf(0) }
+    var showFullscreenMedia by remember { mutableStateOf(false) }
+    var showAudioPlayer by remember { mutableStateOf(false) }
+    var initialAudioUrl by remember { mutableStateOf("") }
+    var initialAudioName by remember { mutableStateOf("") }
 
     val currentUser = FirebaseAuth.getInstance().currentUser ?: return
     val database = FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/")
@@ -257,6 +263,7 @@ fun ChatScreen(
     }
 
     var pendingAttachmentType by remember { mutableStateOf("file") }
+    var isUploading by remember { mutableStateOf(false) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         if (uri != null) {
             val label = when(pendingAttachmentType) {
@@ -265,7 +272,18 @@ fun ChatScreen(
                 "audio" -> "[Аудио]"
                 else -> "Файл: ${uri.lastPathSegment}"
             }
-            sendMessage(label, type = pendingAttachmentType, mediaUrl = uri.toString())
+            isUploading = true
+            val storageRef = com.google.firebase.storage.FirebaseStorage.getInstance().reference.child("chats/$chatId/${System.currentTimeMillis()}")
+            storageRef.putFile(uri)
+                .addOnSuccessListener {
+                    storageRef.downloadUrl.addOnSuccessListener { downloadUri ->
+                        sendMessage(label, type = pendingAttachmentType, mediaUrl = downloadUri.toString())
+                        isUploading = false
+                    }
+                }
+                .addOnFailureListener {
+                    isUploading = false
+                }
         }
     }
 
@@ -457,7 +475,14 @@ fun ChatScreen(
                                 "image", "video" -> {
                                     Column {
                                         if (msg.mediaUrl.isNotBlank()) {
-                                            Box(modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp).clip(RoundedCornerShape(8.dp))) {
+                                            Box(modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp).clip(RoundedCornerShape(8.dp)).clickable { 
+                                                val mediaMessages = messages.filter { it.type == "image" || it.type == "video" }
+                                                val idx = mediaMessages.indexOf(msg)
+                                                if(idx != -1) {
+                                                    initialMediaIndex = idx
+                                                    showFullscreenMedia = true
+                                                }
+                                            }) {
                                                 coil.compose.AsyncImage(
                                                     model = msg.mediaUrl,
                                                     contentDescription = null,
@@ -474,10 +499,7 @@ fun ChatScreen(
                                                 }
                                                 val ctx = androidx.compose.ui.platform.LocalContext.current
                                                 IconButton(
-                                                    onClick = { 
-                                                        // A real app would download using OkHttp/DownloadManager here
-                                                        android.widget.Toast.makeText(ctx, "Сохранено в кэш", android.widget.Toast.LENGTH_SHORT).show()
-                                                    },
+                                                    onClick = { MediaTools.downloadMedia(ctx, msg.mediaUrl, msg.type) },
                                                     modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).background(Color.Black.copy(alpha=0.4f), CircleShape).size(28.dp)
                                                 ) {
                                                     Icon(Icons.Default.Download, contentDescription = "Download", tint = Color.White, modifier = Modifier.size(16.dp))
@@ -494,14 +516,37 @@ fun ChatScreen(
                                 }
                                 "audio", "media", "file" -> {
                                     Column {
-                                        val icon = when(msg.type) {
-                                            "audio" -> Icons.Default.Audiotrack
-                                            else -> androidx.compose.material.icons.Icons.AutoMirrored.Filled.InsertDriveFile
-                                        }
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(icon, contentDescription = null, tint = if (isMine) bubbleSentContentColor else textColor, modifier = Modifier.size(24.dp))
+                                        val ctx = androidx.compose.ui.platform.LocalContext.current
+                                        val isAudio = msg.type == "audio"
+                                        val icon = if (isAudio) Icons.Default.Audiotrack else androidx.compose.material.icons.Icons.AutoMirrored.Filled.InsertDriveFile
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable {
+                                                if (isAudio) {
+                                                    initialAudioUrl = msg.mediaUrl
+                                                    initialAudioName = msg.text
+                                                    showAudioPlayer = true
+                                                } else {
+                                                    MediaTools.downloadMedia(ctx, msg.mediaUrl, "file")
+                                                }
+                                            }.padding(4.dp)
+                                        ) {
+                                            Box(modifier = Modifier.size(40.dp).clip(CircleShape).background(if(isMine) bgColor.copy(alpha=0.3f) else Color.Gray.copy(alpha=0.3f)), contentAlignment = Alignment.Center) {
+                                                Icon(icon, contentDescription = null, tint = if (isMine) bubbleSentContentColor else textColor, modifier = Modifier.size(24.dp))
+                                            }
+                                            Spacer(Modifier.width(12.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(msg.text, color = if (isMine) bubbleSentContentColor else textColor, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                                if (!isAudio) {
+                                                    Text("Нажмите для скачивания", color = if (isMine) bubbleSentContentColor.copy(alpha=0.7f) else dimTextColor, fontSize = 11.sp)
+                                                } else {
+                                                    Text("Нажмите для прослушивания", color = if (isMine) bubbleSentContentColor.copy(alpha=0.7f) else dimTextColor, fontSize = 11.sp)
+                                                }
+                                            }
                                             Spacer(Modifier.width(8.dp))
-                                            Text(msg.text, color = if (isMine) bubbleSentContentColor else textColor, fontSize = 14.sp)
+                                            IconButton(onClick = { MediaTools.downloadMedia(ctx, msg.mediaUrl, msg.type) }, modifier = Modifier.size(24.dp)) {
+                                                Icon(Icons.Default.Download, "Download", tint = if(isMine) bubbleSentContentColor else dimTextColor)
+                                            }
                                         }
                                     }
                                 }
@@ -521,6 +566,9 @@ fun ChatScreen(
                     .navigationBarsPadding()
             ) {
                 Column {
+                    if (isUploading) {
+                        Text("Загрузка медиа...", color = Color(0xFF4FC3F7), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                    }
                     if (replyToMessage != null) {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
@@ -965,6 +1013,139 @@ fun ChatScreen(
                     }
                 }
             }
+        }
+    }
+
+    if (showFullscreenMedia) {
+        val mediaMessages = messages.filter { it.type == "image" || it.type == "video" }
+        if (mediaMessages.isNotEmpty()) {
+            MediaViewer(
+                mediaMessages = mediaMessages,
+                initialIndex = initialMediaIndex,
+                onDismiss = { showFullscreenMedia = false }
+            )
+        }
+    }
+
+    if (showAudioPlayer) {
+        val audioMsgs = messages.filter { it.type == "audio" }
+        val idx = audioMsgs.indexOfFirst { it.mediaUrl == initialAudioUrl }
+        if (audioMsgs.isNotEmpty()) {
+            CustomAudioPlayer(
+                audioMessages = audioMsgs,
+                initialIndex = if (idx >= 0) idx else 0,
+                getSenderName = { if (it == currentUser.uid) "Вы" else recipientName },
+                onDismiss = { showAudioPlayer = false }
+            )
+        }
+    }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+fun MediaViewer(mediaMessages: List<ChatMessage>, initialIndex: Int, onDismiss: () -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        val pagerState = androidx.compose.foundation.pager.rememberPagerState(
+            initialPage = if (initialIndex in mediaMessages.indices) initialIndex else 0,
+            pageCount = { mediaMessages.size }
+        )
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+            androidx.compose.foundation.pager.HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize()
+            ) { page ->
+                val msg = mediaMessages[page]
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    if (msg.type == "image" || msg.type == "video") {
+                        coil.compose.AsyncImage(
+                            model = msg.mediaUrl,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                        )
+                        if (msg.type == "video") {
+                            IconButton(onClick = {
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
+                                intent.setDataAndType(android.net.Uri.parse(msg.mediaUrl), "video/*")
+                                ctx.startActivity(intent)
+                            }, modifier = Modifier.align(Alignment.Center).size(64.dp).background(Color.Black.copy(alpha=0.5f), CircleShape)) {
+                                Icon(Icons.Default.Videocam, "Play", tint = Color.White, modifier = Modifier.size(32.dp))
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Top Bar
+            Row(
+                modifier = Modifier.fillMaxWidth().background(Color.Black.copy(alpha=0.4f)).padding(top = 24.dp).height(56.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close", tint = Color.White)
+                }
+                Spacer(Modifier.weight(1f))
+                
+                var showMenu by remember { mutableStateOf(false) }
+                Box {
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "More", tint = Color.White)
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false },
+                        containerColor = Color.DarkGray
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Скачать", color = Color.White) },
+                            onClick = { 
+                                showMenu = false
+                                val msg = mediaMessages[pagerState.currentPage]
+                                MediaTools.downloadMedia(ctx, msg.mediaUrl, msg.type)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Поделиться", color = Color.White) },
+                            onClick = { 
+                                showMenu = false
+                                val msg = mediaMessages[pagerState.currentPage]
+                                val intent = android.content.Intent(android.content.Intent.ACTION_SEND)
+                                intent.type = if (msg.type == "video") "video/*" else "image/*"
+                                intent.putExtra(android.content.Intent.EXTRA_TEXT, msg.mediaUrl)
+                                ctx.startActivity(android.content.Intent.createChooser(intent, "Поделиться"))
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+object MediaTools {
+    fun downloadMedia(ctx: android.content.Context, url: String, type: String) {
+        if (url.isBlank()) return
+        try {
+            val request = android.app.DownloadManager.Request(android.net.Uri.parse(url))
+            val ext = when(type) {
+                "image" -> "jpg"
+                "video" -> "mp4"
+                "audio" -> "mp3"
+                else -> "bin"
+            }
+            val filename = "slant_media_${System.currentTimeMillis()}.$ext"
+            request.setTitle(filename)
+            request.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            request.setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, filename)
+            val manager = ctx.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
+            manager.enqueue(request)
+            android.widget.Toast.makeText(ctx, "Скачивание начато", android.widget.Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(ctx, "Ошибка скачивания", android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 }
