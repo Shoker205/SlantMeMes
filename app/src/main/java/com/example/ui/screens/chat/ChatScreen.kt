@@ -96,6 +96,14 @@ object ChatCrypto {
     }
 }
 
+data class ChatAttachment(
+    val url: String = "",
+    val type: String = "",
+    val filename: String = ""
+)
+
+data class PendingAttachment(val uri: android.net.Uri, val type: String)
+
 data class ChatMessage(
     val id: String = "",
     val senderId: String = "",
@@ -104,10 +112,11 @@ data class ChatMessage(
     val timestamp: Long = 0L,
     val mediaUrl: String = "",
     val replyToMsgId: String? = null,
-    val isRead: Boolean = false
+    val isRead: Boolean = false,
+    val attachments: List<ChatAttachment> = emptyList()
 )
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun ChatScreen(
     recipientId: String,
@@ -129,6 +138,7 @@ fun ChatScreen(
     var showAudioPlayer by remember { mutableStateOf(false) }
     var initialAudioUrl by remember { mutableStateOf("") }
     var initialAudioName by remember { mutableStateOf("") }
+    var pendingAttachments by remember { mutableStateOf<List<PendingAttachment>>(emptyList()) }
 
     val currentUser = FirebaseAuth.getInstance().currentUser ?: return
     val database = FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/")
@@ -210,11 +220,11 @@ fun ChatScreen(
         })
     }
 
-    fun sendMessage(text: String, type: String = "text", mediaUrl: String = "") {
-        if (text.isBlank() && mediaUrl.isBlank()) return
+    fun sendMessage(text: String, type: String = "text", mediaUrl: String = "", attachments: List<ChatAttachment> = emptyList()) {
+        if (text.isBlank() && mediaUrl.isBlank() && attachments.isEmpty()) return
         val messagesRef = database.getReference("chats").child(chatId).child("messages")
         
-        val encryptedText = if (type == "text") {
+        val encryptedText = if (type == "text" || type == "media_group") {
             ChatCrypto.encrypt(text, chatId)
         } else text
         
@@ -230,7 +240,8 @@ fun ChatScreen(
                 type = type,
                 timestamp = System.currentTimeMillis(),
                 mediaUrl = mediaUrl,
-                replyToMsgId = replyToMessage?.id
+                replyToMsgId = replyToMessage?.id,
+                attachments = attachments
             )
             messagesRef.child(newMsgId).setValue(msg)
             
@@ -262,27 +273,68 @@ fun ChatScreen(
         }
     }
 
-    var pendingAttachmentType by remember { mutableStateOf("file") }
+    var pendingAttachmentType by remember { mutableStateOf("image/*") }
     var isUploading by remember { mutableStateOf(false) }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) {
-            val label = when(pendingAttachmentType) {
-                "image" -> "[Фото]"
-                "video" -> "[Видео]"
-                "audio" -> "[Аудио]"
-                else -> "Файл: ${uri.lastPathSegment}"
-            }
-            isUploading = true
-            val storageRef = com.google.firebase.storage.FirebaseStorage.getInstance().reference.child("chats/$chatId/${System.currentTimeMillis()}")
-            storageRef.putFile(uri)
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        val typeLabel = when {
+            pendingAttachmentType.startsWith("image") -> "image"
+            pendingAttachmentType.startsWith("video") -> "video"
+            pendingAttachmentType.startsWith("audio") -> "audio"
+            else -> "file"
+        }
+        val toAdd = uris.take(10 - pendingAttachments.size).map { PendingAttachment(it, typeLabel) }
+        if (toAdd.isNotEmpty()) {
+            pendingAttachments = pendingAttachments + toAdd
+        }
+        if (uris.size > 10) {
+            android.widget.Toast.makeText(ctx, "Выбрано больше 10 файлов", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    fun uploadAndSendMessage(text: String, audioUri: android.net.Uri? = null) {
+        val attachmentsToUpload = pendingAttachments.toList() + (audioUri?.let { listOf(PendingAttachment(it, "audio")) } ?: emptyList())
+        if (attachmentsToUpload.isEmpty()) {
+            if (text.isNotBlank()) sendMessage(text)
+            return
+        }
+        
+        isUploading = true
+        pendingAttachments = emptyList() // clear
+        val uploadedAttachments = mutableListOf<ChatAttachment>()
+        var uploadsCompleted = 0
+        
+        val defaultText = when(attachmentsToUpload.first().type) {
+            "image" -> "[Фото]"
+            "video" -> "[Видео]"
+            "audio" -> "[Аудио]"
+            else -> "Файлы"
+        }
+        
+        attachmentsToUpload.forEach { pending ->
+            val storageRef = com.google.firebase.storage.FirebaseStorage.getInstance().reference.child("chats/$chatId/${System.currentTimeMillis()}_${pending.uri.lastPathSegment ?: "file"}")
+            storageRef.putFile(pending.uri)
                 .addOnSuccessListener {
                     storageRef.downloadUrl.addOnSuccessListener { downloadUri ->
-                        sendMessage(label, type = pendingAttachmentType, mediaUrl = downloadUri.toString())
-                        isUploading = false
+                        uploadedAttachments.add(ChatAttachment(url = downloadUri.toString(), type = pending.type, filename = pending.uri.lastPathSegment ?: "file"))
+                        uploadsCompleted++
+                        if (uploadsCompleted == attachmentsToUpload.size) {
+                            isUploading = false
+                            val sendType = if (uploadedAttachments.size == 1 && text.isBlank()) pending.type else "media_group"
+                            sendMessage(if (text.isNotBlank()) text else defaultText, type = sendType, attachments = uploadedAttachments)
+                        }
                     }
                 }
                 .addOnFailureListener {
-                    isUploading = false
+                    uploadsCompleted++
+                    if (uploadsCompleted == attachmentsToUpload.size) {
+                        isUploading = false
+                        if (uploadedAttachments.isNotEmpty()) {
+                            val sendType = if (uploadedAttachments.size == 1 && text.isBlank()) uploadedAttachments.first().type else "media_group"
+                            sendMessage(if (text.isNotBlank()) text else defaultText, type = sendType, attachments = uploadedAttachments)
+                        }
+                    }
                 }
         }
     }
@@ -463,16 +515,72 @@ fun ChatScreen(
                                     }
                                 }
                             }
-                            when (msg.type) {
-                                "text" -> {
-                                    Text(
-                                        text = msg.text,
-                                        color = if (isMine) bubbleSentContentColor else textColor,
-                                        fontSize = 15.sp,
-                                        lineHeight = 20.sp
-                                    )
-                                }
-                                "image", "video" -> {
+                                    if (msg.attachments.isNotEmpty()) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            androidx.compose.foundation.layout.FlowRow(
+                                                modifier = Modifier.fillMaxWidth(0.9f),
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                msg.attachments.forEach { attachment ->
+                                                    val isMedia = attachment.type.startsWith("image") || attachment.type.startsWith("video")
+                                                    val ctx = androidx.compose.ui.platform.LocalContext.current
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(120.dp)
+                                                            .clip(RoundedCornerShape(8.dp))
+                                                            .background(Color.Gray.copy(alpha=0.3f))
+                                                            .clickable {
+                                                                if (isMedia) {
+                                                                    initialAudioUrl = attachment.url // using this state var hackily for passing url
+                                                                    showFullscreenMedia = true
+                                                                } else if (attachment.type.startsWith("audio")) {
+                                                                    initialAudioUrl = attachment.url
+                                                                    initialAudioName = attachment.filename
+                                                                    showAudioPlayer = true
+                                                                } else {
+                                                                    MediaTools.downloadMedia(ctx, attachment.url, "file")
+                                                                }
+                                                            },
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        if (isMedia) {
+                                                            coil.compose.AsyncImage(
+                                                                model = attachment.url,
+                                                                contentDescription = null,
+                                                                modifier = Modifier.fillMaxSize(),
+                                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                                            )
+                                                            if (attachment.type.startsWith("video")) {
+                                                                Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha=0.3f)), contentAlignment = Alignment.Center) {
+                                                                    Icon(Icons.Default.Videocam, null, tint = Color.White, modifier = Modifier.size(32.dp))
+                                                                }
+                                                            }
+                                                        } else {
+                                                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(8.dp)) {
+                                                                Icon(if (attachment.type.startsWith("audio")) Icons.Default.Audiotrack else androidx.compose.material.icons.Icons.AutoMirrored.Filled.InsertDriveFile, null, tint = if(isMine) bubbleSentContentColor else textColor, modifier = Modifier.size(32.dp))
+                                                                Spacer(Modifier.height(4.dp))
+                                                                Text(attachment.filename.takeIf { it.isNotBlank() } ?: "Файл", color = if(isMine) bubbleSentContentColor else textColor, fontSize = 10.sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            if (msg.text.isNotBlank() && msg.text != "Файлы" && msg.text != "[Фото]" && msg.text != "[Видео]" && msg.text != "[Аудио]") {
+                                                Text(msg.text, color = if(isMine) bubbleSentContentColor else textColor, fontSize = 15.sp)
+                                            }
+                                        }
+                                    } else {
+                                        when (msg.type) {
+                                            "text" -> {
+                                                Text(
+                                                    text = msg.text,
+                                                    color = if (isMine) bubbleSentContentColor else textColor,
+                                                    fontSize = 15.sp,
+                                                    lineHeight = 20.sp
+                                                )
+                                            }
+                                            "image", "video" -> {
                                     Column {
                                         if (msg.mediaUrl.isNotBlank()) {
                                             Box(modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp).clip(RoundedCornerShape(8.dp)).clickable { 
@@ -551,6 +659,7 @@ fun ChatScreen(
                                     }
                                 }
                             }
+                            } // Close else block
                         }
                     }
                 } // Box end
@@ -566,6 +675,40 @@ fun ChatScreen(
                     .navigationBarsPadding()
             ) {
                 Column {
+                    if (pendingAttachments.isNotEmpty()) {
+                        androidx.compose.foundation.lazy.LazyRow(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(pendingAttachments.size) { index ->
+                                val attachment = pendingAttachments[index]
+                                Box(
+                                    modifier = Modifier.size(64.dp).clip(RoundedCornerShape(8.dp)).background(bgColor),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (attachment.type.startsWith("image") || attachment.type.startsWith("video")) {
+                                        coil.compose.AsyncImage(
+                                            model = attachment.uri,
+                                            contentDescription = null,
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                        )
+                                        if (attachment.type.startsWith("video")) {
+                                            Icon(Icons.Default.Videocam, "Video", tint = Color.White, modifier = Modifier.size(24.dp).align(Alignment.Center))
+                                        }
+                                    } else {
+                                        Icon(if (attachment.type.startsWith("audio")) Icons.Default.Audiotrack else androidx.compose.material.icons.Icons.AutoMirrored.Filled.InsertDriveFile, null, tint = dimTextColor, modifier = Modifier.size(32.dp))
+                                    }
+                                    IconButton(
+                                        onClick = { pendingAttachments = pendingAttachments.filterIndexed { i, _ -> i != index } },
+                                        modifier = Modifier.align(Alignment.TopEnd).padding(2.dp).size(20.dp).background(Color.Black.copy(alpha=0.5f), CircleShape)
+                                    ) {
+                                        Icon(Icons.Default.Close, "Remove", tint = Color.White, modifier = Modifier.size(14.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
                     if (isUploading) {
                         Text("Загрузка медиа...", color = Color(0xFF4FC3F7), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                     }
@@ -756,7 +899,7 @@ fun ChatScreen(
                                 .pointerInput(inputText, isRecordingLocked) {
                                     if (inputText.isNotBlank()) {
                                         detectTapGestures {
-                                            sendMessage(inputText.trim(), "text")
+                                            uploadAndSendMessage(inputText.trim())
                                             inputText = ""
                                         }
                                     } else if (isRecordingLocked) {
@@ -1017,23 +1160,44 @@ fun ChatScreen(
     }
 
     if (showFullscreenMedia) {
-        val mediaMessages = messages.filter { it.type == "image" || it.type == "video" }
+        val mediaMessages = messages.flatMap { msg ->
+            if (msg.attachments.isNotEmpty()) {
+                msg.attachments.filter { it.type.startsWith("image") || it.type.startsWith("video") }.map {
+                    ChatMessage(id = msg.id, senderId = msg.senderId, text = it.filename, type = it.type, timestamp = msg.timestamp, mediaUrl = it.url)
+                }
+            } else if (msg.type == "image" || msg.type == "video") {
+                listOf(msg)
+            } else {
+                emptyList()
+            }
+        }
+        val idx = mediaMessages.indexOfFirst { it.mediaUrl == initialAudioUrl }.takeIf { it >= 0 } ?: initialMediaIndex
         if (mediaMessages.isNotEmpty()) {
             MediaViewer(
                 mediaMessages = mediaMessages,
-                initialIndex = initialMediaIndex,
+                initialIndex = if (idx >= 0 && idx < mediaMessages.size) idx else 0,
                 onDismiss = { showFullscreenMedia = false }
             )
         }
     }
 
     if (showAudioPlayer) {
-        val audioMsgs = messages.filter { it.type == "audio" }
+        val audioMsgs = messages.flatMap { msg ->
+            if (msg.attachments.isNotEmpty()) {
+                msg.attachments.filter { it.type.startsWith("audio") }.map {
+                    ChatMessage(id = msg.id, senderId = msg.senderId, text = it.filename, type = it.type, timestamp = msg.timestamp, mediaUrl = it.url)
+                }
+            } else if (msg.type == "audio") {
+                listOf(msg)
+            } else {
+                emptyList()
+            }
+        }
         val idx = audioMsgs.indexOfFirst { it.mediaUrl == initialAudioUrl }
         if (audioMsgs.isNotEmpty()) {
             CustomAudioPlayer(
                 audioMessages = audioMsgs,
-                initialIndex = if (idx >= 0) idx else 0,
+                initialIndex = if (idx >= 0 && idx < audioMsgs.size) idx else 0,
                 getSenderName = { if (it == currentUser.uid) "Вы" else recipientName },
                 onDismiss = { showAudioPlayer = false }
             )
