@@ -357,13 +357,13 @@ fun ChatScreen(
                                     }
                                 }
                                 Spacer(Modifier.width(12.dp))
-                                Column(verticalArrangement = Arrangement.Center) {
-                                    Text(recipientName, color = textColor, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                Column(verticalArrangement = Arrangement.Center, modifier = Modifier.height(36.dp)) {
+                                    Text(recipientName, color = textColor, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, lineHeight = 20.sp)
                                     if (recipientOnline) {
-                                        Text("онлайн", color = Color(0xFF4FC3F7), fontSize = 12.sp)
+                                        Text("онлайн", color = Color(0xFF4FC3F7), fontSize = 12.sp, lineHeight = 16.sp)
                                     } else if (recipientLastSeen > 0L) {
                                         val dateStr = java.text.SimpleDateFormat("HH:mm, dd MMM", java.util.Locale.getDefault()).format(java.util.Date(recipientLastSeen))
-                                        Text("был(а) $dateStr", color = dimTextColor, fontSize = 12.sp)
+                                        Text("был(а) $dateStr", color = dimTextColor, fontSize = 12.sp, lineHeight = 16.sp)
                                     }
                                 }
                             }
@@ -750,257 +750,276 @@ fun ChatScreen(
                             }
                         }
                     }
-                    Row(verticalAlignment = Alignment.Bottom) {
-                    Box(modifier = Modifier.padding(bottom = 4.dp)) {
-                        IconButton(onClick = { showAttachmentMenu = !showAttachmentMenu }) {
-                            Icon(Icons.Default.Add, contentDescription = "Attach", tint = dimTextColor, modifier = Modifier.size(28.dp).clip(CircleShape).background(surfaceColor))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .background(bgColor, RoundedCornerShape(24.dp)),
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        Box(modifier = Modifier.padding(bottom = 2.dp)) {
+                            IconButton(onClick = { showAttachmentMenu = !showAttachmentMenu }) {
+                                Icon(Icons.Default.Add, contentDescription = "Attach", tint = dimTextColor, modifier = Modifier.size(28.dp))
+                            }
+                            DropdownMenu(
+                                expanded = showAttachmentMenu,
+                                onDismissRequest = { showAttachmentMenu = false },
+                                containerColor = surfaceColor
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Изображение", color = textColor) },
+                                    leadingIcon = { Icon(Icons.Default.Image, contentDescription = null, tint = dimTextColor) },
+                                    onClick = { showAttachmentMenu = false; pendingAttachmentType = "image"; launcher.launch("image/*") }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Видео", color = textColor) },
+                                    leadingIcon = { Icon(Icons.Default.Videocam, contentDescription = null, tint = dimTextColor) },
+                                    onClick = { showAttachmentMenu = false; pendingAttachmentType = "video"; launcher.launch("video/*") }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Аудио", color = textColor) },
+                                    leadingIcon = { Icon(Icons.Default.Audiotrack, contentDescription = null, tint = dimTextColor) },
+                                    onClick = { showAttachmentMenu = false; pendingAttachmentType = "audio"; launcher.launch("audio/*") }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Файл", color = textColor) },
+                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.InsertDriveFile, contentDescription = null, tint = dimTextColor) },
+                                    onClick = { showAttachmentMenu = false; pendingAttachmentType = "file"; launcher.launch("*/*") }
+                                )
+                            }
                         }
-                        DropdownMenu(
-                            expanded = showAttachmentMenu,
-                            onDismissRequest = { showAttachmentMenu = false },
-                            containerColor = surfaceColor
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Изображение", color = textColor) },
-                                leadingIcon = { Icon(Icons.Default.Image, contentDescription = null, tint = dimTextColor) },
-                                onClick = { showAttachmentMenu = false; pendingAttachmentType = "image"; launcher.launch("image/*") }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Видео", color = textColor) },
-                                leadingIcon = { Icon(Icons.Default.Videocam, contentDescription = null, tint = dimTextColor) },
-                                onClick = { showAttachmentMenu = false; pendingAttachmentType = "video"; launcher.launch("video/*") }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Аудио", color = textColor) },
-                                leadingIcon = { Icon(Icons.Default.Audiotrack, contentDescription = null, tint = dimTextColor) },
-                                onClick = { showAttachmentMenu = false; pendingAttachmentType = "audio"; launcher.launch("audio/*") }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Файл", color = textColor) },
-                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.InsertDriveFile, contentDescription = null, tint = dimTextColor) },
-                                onClick = { showAttachmentMenu = false; pendingAttachmentType = "file"; launcher.launch("*/*") }
-                            )
+                        
+                        val ctx = androidx.compose.ui.platform.LocalContext.current
+                        val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+                        val recorder = remember { com.example.utils.VoiceRecorder(ctx) }
+                        var audioPermissionGranted by remember { mutableStateOf(androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) }
+                        val audioPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+                            audioPermissionGranted = isGranted
+                            if (!isGranted) {
+                                android.widget.Toast.makeText(ctx, "Разрешение на микрофон необходимо", android.widget.Toast.LENGTH_SHORT).show()
+                            }
                         }
-                    }
-                    
-                    val ctx = androidx.compose.ui.platform.LocalContext.current
-                    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-                    val recorder = remember { com.example.utils.VoiceRecorder(ctx) }
-                    var audioPermissionGranted by remember { mutableStateOf(androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) }
-                    val audioPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-                        audioPermissionGranted = isGranted
-                        if (!isGranted) {
-                            android.widget.Toast.makeText(ctx, "Разрешение на микрофон необходимо", android.widget.Toast.LENGTH_SHORT).show()
+                        var isRecording by remember { mutableStateOf(false) }
+                        var isRecordingLocked by remember { mutableStateOf(false) }
+                        var recordSlideOffset by remember { mutableFloatStateOf(0f) }
+                        var recordSlideYOffset by remember { mutableFloatStateOf(0f) }
+                        var recordingSeconds by remember { mutableIntStateOf(0) }
+                        var hasVibratedForLock by remember { mutableStateOf(false) }
+                        
+                        LaunchedEffect(isRecording) {
+                            if (isRecording) {
+                                recordingSeconds = 0
+                                while (isActive) {
+                                    kotlinx.coroutines.delay(1000)
+                                    recordingSeconds++
+                                }
+                            }
                         }
-                    }
-                    var isRecording by remember { mutableStateOf(false) }
-                    var isRecordingLocked by remember { mutableStateOf(false) }
-                    var recordSlideOffset by remember { mutableFloatStateOf(0f) }
-                    var recordSlideYOffset by remember { mutableFloatStateOf(0f) }
-                    var recordingSeconds by remember { mutableIntStateOf(0) }
-                    var hasVibratedForLock by remember { mutableStateOf(false) }
-                    
-                    LaunchedEffect(isRecording) {
+                        
                         if (isRecording) {
-                            recordingSeconds = 0
-                            while (isActive) {
-                                kotlinx.coroutines.delay(1000)
-                                recordingSeconds++
-                            }
-                        }
-                    }
-                    
-                    if (isRecording) {
-                        Row(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(end = 8.dp)
-                                .height(48.dp)
-                                .background(bgColor, RoundedCornerShape(24.dp)),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (isRecordingLocked) {
-                                IconButton(onClick = {
-                                    recorder.cancelRecording()
-                                    isRecording = false
-                                    isRecordingLocked = false
-                                }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.Red)
-                                }
-                            } else {
-                                Spacer(Modifier.width(16.dp))
-                                Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(Color.Red))
-                            }
-                            
-                            Spacer(Modifier.width(8.dp))
-                            val min = recordingSeconds / 60
-                            val sec = recordingSeconds % 60
-                            Text(String.format(java.util.Locale.US, "%d:%02d", min, sec), color = textColor, fontSize = 14.sp)
-                            
-                            val infiniteTransition = rememberInfiniteTransition()
-                            val wavePhase by infiniteTransition.animateFloat(initialValue = 0f, targetValue = 2 * Math.PI.toFloat(), animationSpec = infiniteRepeatable(animation = tween(1000, easing = LinearEasing), repeatMode = RepeatMode.Restart), label = "")
-                            
-                            Canvas(modifier = Modifier.weight(1f).height(24.dp).padding(horizontal = 8.dp)) {
-                                val barWidth = 3.dp.toPx()
-                                val space = 2.dp.toPx()
-                                val bars = (size.width / (barWidth + space)).toInt()
-                                for (i in 0 until bars) {
-                                    val x = i * (barWidth + space)
-                                    val phaseOffset = i * 0.3f
-                                    val normalizedSine = (kotlin.math.sin(wavePhase + phaseOffset) + 1) / 2
-                                    val barHeight = (size.height * 0.3f) + (size.height * 0.7f) * normalizedSine
-                                    drawRect(
-                                        color = Color(0xFF4FC3F7),
-                                        topLeft = Offset(x, (size.height - barHeight.toFloat()) / 2),
-                                        size = Size(barWidth, barHeight.toFloat())
-                                    )
-                                }
-                            }
-
-                            if (!isRecordingLocked) {
-                                val cancelAlpha = (1f - (-recordSlideOffset / 150f)).coerceIn(0f, 1f)
-                                Text("< Отмените свайпом", color = dimTextColor.copy(alpha = cancelAlpha), fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.offset { androidx.compose.ui.unit.IntOffset(recordSlideOffset.toInt(), 0) })
-                                Spacer(Modifier.width(16.dp))
-                            } else {
-                                IconButton(onClick = {
-                                    val file = recorder.stopRecording()
-                                    if (file != null) uploadAndSendMessage("", android.net.Uri.fromFile(file))
-                                    isRecording = false
-                                    isRecordingLocked = false
-                                }) {
-                                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Color(0xFF4FC3F7))
-                                }
-                            }
-                        }
-                    } else {
-                        Row(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(end = 8.dp)
-                                .defaultMinSize(minHeight = 40.dp)
-                                .background(bgColor, RoundedCornerShape(20.dp))
-                                .padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            BasicTextField(
-                                value = inputText,
-                                onValueChange = { inputText = it },
-                                textStyle = androidx.compose.ui.text.TextStyle(color = textColor, fontSize = 16.sp),
-                                maxLines = 5,
-                                modifier = Modifier.weight(1f),
-                                decorationBox = { innerTextField ->
-                                    if (inputText.isEmpty()) {
-                                        Text("Сообщение...", color = dimTextColor, fontSize = 16.sp)
+                            Row(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(40.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (isRecordingLocked) {
+                                    IconButton(onClick = {
+                                        recorder.cancelRecording()
+                                        isRecording = false
+                                        isRecordingLocked = false
+                                    }) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.Red, modifier = Modifier.size(24.dp))
                                     }
-                                    innerTextField()
-                                },
-                                cursorBrush = SolidColor(if (isDarkTheme) Color.White else Color.Black)
-                            )
-                        }
-                    }
-                    
-                    val micButtonSize by animateDpAsState(targetValue = if (isRecording && !isRecordingLocked) 64.dp else 44.dp, label = "")
-                    Box(modifier = Modifier.padding(bottom = if (isRecording && !isRecordingLocked) 0.dp else 2.dp)) {
-                        if (isRecording && !isRecordingLocked && recordSlideYOffset < -20f) {
-                            Box(modifier = Modifier.offset(x = 14.dp, y = (-60).dp).background(surfaceColor, CircleShape).padding(8.dp)) {
-                                Icon(Icons.Default.Lock, contentDescription = "Lock", tint = dimTextColor, modifier = Modifier.size(16.dp))
+                                } else {
+                                    Spacer(Modifier.width(8.dp))
+                                    Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(Color.Red))
+                                }
+                                
+                                Spacer(Modifier.width(8.dp))
+                                val min = recordingSeconds / 60
+                                val sec = recordingSeconds % 60
+                                Text(String.format(java.util.Locale.US, "%d:%02d", min, sec), color = textColor, fontSize = 14.sp)
+                                
+                                val infiniteTransition = rememberInfiniteTransition()
+                                val wavePhase by infiniteTransition.animateFloat(initialValue = 0f, targetValue = 2 * Math.PI.toFloat(), animationSpec = infiniteRepeatable(animation = tween(1000, easing = LinearEasing), repeatMode = RepeatMode.Restart), label = "")
+                                
+                                Canvas(modifier = Modifier.weight(1f).height(24.dp).padding(horizontal = 8.dp)) {
+                                    val barWidth = 3.dp.toPx()
+                                    val space = 2.dp.toPx()
+                                    val bars = (size.width / (barWidth + space)).toInt()
+                                    for (i in 0 until bars) {
+                                        val x = i * (barWidth + space)
+                                        val phaseOffset = i * 0.3f
+                                        val normalizedSine = (kotlin.math.sin(wavePhase + phaseOffset) + 1) / 2
+                                        val barHeight = (size.height * 0.3f) + (size.height * 0.7f) * normalizedSine
+                                        drawRect(
+                                            color = Color(0xFF4FC3F7),
+                                            topLeft = Offset(x, (size.height - barHeight.toFloat()) / 2),
+                                            size = Size(barWidth, barHeight.toFloat())
+                                        )
+                                    }
+                                }
+    
+                                if (!isRecordingLocked) {
+                                    val cancelAlpha = (1f - (-recordSlideOffset / 150f)).coerceIn(0f, 1f)
+                                    Text("< Отмените", color = dimTextColor.copy(alpha = cancelAlpha), fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.offset { androidx.compose.ui.unit.IntOffset(recordSlideOffset.toInt(), 0) })
+                                    Spacer(Modifier.width(8.dp))
+                                } else {
+                                    IconButton(onClick = {
+                                        val file = recorder.stopRecording()
+                                        if (file != null) uploadAndSendMessage("", android.net.Uri.fromFile(file))
+                                        isRecording = false
+                                        isRecordingLocked = false
+                                    }) {
+                                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Color(0xFF4FC3F7))
+                                    }
+                                }
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .defaultMinSize(minHeight = 40.dp)
+                                    .padding(vertical = 10.dp, horizontal = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                BasicTextField(
+                                    value = inputText,
+                                    onValueChange = { inputText = it },
+                                    textStyle = androidx.compose.ui.text.TextStyle(color = textColor, fontSize = 16.sp),
+                                    maxLines = 5,
+                                    modifier = Modifier.weight(1f),
+                                    decorationBox = { innerTextField ->
+                                        if (inputText.isEmpty()) {
+                                            Text("Сообщение...", color = dimTextColor, fontSize = 16.sp)
+                                        }
+                                        innerTextField()
+                                    },
+                                    cursorBrush = SolidColor(if (isDarkTheme) Color.White else Color.Black)
+                                )
                             }
                         }
-                        Box(
-                            modifier = Modifier
-                                .offset { androidx.compose.ui.unit.IntOffset(
-                                    if (!isRecordingLocked) recordSlideOffset.toInt() else 0,
-                                    if (!isRecordingLocked) recordSlideYOffset.toInt() else 0
-                                ) }
-                                .clip(CircleShape)
-                                .background(if (isRecordingLocked) Color.Red.copy(alpha = 0.2f) else dimTextColor.copy(alpha = 0.2f))
-                                .size(micButtonSize)
-                                .pointerInput(inputText, isRecordingLocked) {
-                                    if (inputText.isNotBlank()) {
-                                        detectTapGestures {
-                                            uploadAndSendMessage(inputText.trim())
-                                            inputText = ""
-                                        }
-                                    } else if (isRecordingLocked) {
-                                        detectTapGestures {
-                                            recorder.cancelRecording()
-                                            isRecording = false
-                                            isRecordingLocked = false
-                                        }
-                                    } else {
-                                        detectDragGestures(
-                                            onDragStart = { 
-                                                if (!audioPermissionGranted) {
-                                                    audioPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
-                                                    return@detectDragGestures
-                                                }
-                                                isRecording = true 
-                                                recordSlideOffset = 0f
-                                                recordSlideYOffset = 0f
-                                                hasVibratedForLock = false
-                                                recorder.startRecording()
-                                            },
-                                            onDragEnd = {
-                                                if (recordSlideOffset < -150f) {
-                                                    recorder.cancelRecording()
-                                                    isRecording = false // Cancel
-                                                } else if (recordSlideYOffset <= -60f || hasVibratedForLock) {
-                                                    isRecordingLocked = true // Lock
-                                                    recordSlideYOffset = 0f
-                                                    recordSlideOffset = 0f
-                                                } else {
-                                                    val file = recorder.stopRecording()
-                                                    if (file != null) uploadAndSendMessage("", android.net.Uri.fromFile(file))
-                                                    isRecording = false
-                                                }
-                                                if (!isRecordingLocked) {
-                                                    recordSlideOffset = 0f
-                                                    recordSlideYOffset = 0f
-                                                }
-                                            },
-                                            onDragCancel = {
+                        
+                        val micButtonSize by animateDpAsState(targetValue = if (isRecording && !isRecordingLocked) 64.dp else 44.dp, label = "")
+                        Box(modifier = Modifier.padding(bottom = 2.dp, end = 2.dp)) {
+                            if (isRecording && !isRecordingLocked && recordSlideYOffset < -20f) {
+                                Box(modifier = Modifier.offset(x = 14.dp, y = (-60).dp).background(surfaceColor, CircleShape).padding(8.dp)) {
+                                    Icon(Icons.Default.Lock, contentDescription = "Lock", tint = dimTextColor, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .offset { androidx.compose.ui.unit.IntOffset(
+                                        if (!isRecordingLocked) recordSlideOffset.toInt() else 0,
+                                        if (!isRecordingLocked) recordSlideYOffset.toInt() else 0
+                                    ) }
+                                    .size(44.dp), // anchor size so row doesn't jump
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .requiredSize(micButtonSize)
+                                        .clip(CircleShape)
+                                        .background(if (isRecordingLocked) Color.Red.copy(alpha = 0.2f) else Color.Transparent),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (inputText.isNotBlank() || pendingAttachments.isNotEmpty()) {
+                                        Box(
+                                        modifier = Modifier.fillMaxSize().pointerInput(inputText, pendingAttachments, isRecordingLocked) {
+                                            detectTapGestures {
+                                                uploadAndSendMessage(inputText.trim())
+                                                inputText = ""
+                                            }
+                                        },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Color(0xFF4FC3F7), modifier = Modifier.size(24.dp))
+                                    }
+                                } else if (isRecordingLocked) {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize().pointerInput(isRecordingLocked) {
+                                            detectTapGestures {
                                                 recorder.cancelRecording()
                                                 isRecording = false
                                                 isRecordingLocked = false
-                                                recordSlideOffset = 0f
-                                                recordSlideYOffset = 0f
-                                            },
-                                            onDrag = { change, dragAmount ->
-                                                change.consume()
-                                                if (!isRecordingLocked) {
-                                                    val newX = recordSlideOffset + dragAmount.x
-                                                    val newY = recordSlideYOffset + dragAmount.y
-                                                    if (kotlin.math.abs(newX) > kotlin.math.abs(newY * 1.5f) && newX < 0f) {
-                                                        recordSlideOffset = newX.coerceAtLeast(-200f)
-                                                    } else if (newY < 0f) {
-                                                        recordSlideYOffset = newY.coerceAtLeast(-80f)
-                                                        if (recordSlideYOffset <= -70f && !hasVibratedForLock) {
-                                                            hasVibratedForLock = true
-                                                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                            }
+                                        },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.Red, modifier = Modifier.size(24.dp))
+                                    }
+                                } else {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize().pointerInput(Unit) {
+                                            detectDragGestures(
+                                                onDragStart = { 
+                                                    if (!audioPermissionGranted) {
+                                                        audioPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                                                        return@detectDragGestures
+                                                    }
+                                                    isRecording = true 
+                                                    recordSlideOffset = 0f
+                                                    recordSlideYOffset = 0f
+                                                    hasVibratedForLock = false
+                                                    recorder.startRecording()
+                                                },
+                                                onDragEnd = {
+                                                    if (recordSlideOffset < -150f) {
+                                                        recorder.cancelRecording()
+                                                        isRecording = false // Cancel
+                                                    } else if (recordSlideYOffset <= -60f || hasVibratedForLock) {
+                                                        isRecordingLocked = true // Lock
+                                                        recordSlideYOffset = 0f
+                                                        recordSlideOffset = 0f
+                                                    } else {
+                                                        val file = recorder.stopRecording()
+                                                        if (file != null) uploadAndSendMessage("", android.net.Uri.fromFile(file))
+                                                        isRecording = false
+                                                    }
+                                                    if (!isRecordingLocked) {
+                                                        recordSlideOffset = 0f
+                                                        recordSlideYOffset = 0f
+                                                    }
+                                                },
+                                                onDragCancel = {
+                                                    recorder.cancelRecording()
+                                                    isRecording = false
+                                                    isRecordingLocked = false
+                                                    recordSlideOffset = 0f
+                                                    recordSlideYOffset = 0f
+                                                },
+                                                onDrag = { change, dragAmount ->
+                                                    change.consume()
+                                                    if (!isRecordingLocked) {
+                                                        val newX = recordSlideOffset + dragAmount.x
+                                                        val newY = recordSlideYOffset + dragAmount.y
+                                                        if (kotlin.math.abs(newX) > kotlin.math.abs(newY * 1.5f) && newX < 0f) {
+                                                            recordSlideOffset = newX.coerceAtLeast(-200f)
+                                                        } else if (newY < 0f) {
+                                                            recordSlideYOffset = newY.coerceAtLeast(-80f)
+                                                            if (recordSlideYOffset <= -70f && !hasVibratedForLock) {
+                                                                hasVibratedForLock = true
+                                                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                                            }
                                                         }
                                                     }
                                                 }
-                                            }
-                                        )
+                                            )
+                                        },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Mic, contentDescription = "Record Voice", tint = dimTextColor, modifier = Modifier.size(if (isRecording) 32.dp else 24.dp))
                                     }
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (inputText.isNotBlank()) {
-                                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Color(0xFF4FC3F7), modifier = Modifier.size(24.dp))
-                            } else if (isRecordingLocked) {
-                                Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.Red, modifier = Modifier.size(24.dp))
-                            } else {
-                                Icon(Icons.Default.Mic, contentDescription = "Record Voice", tint = textColor, modifier = Modifier.size(if (isRecording) 32.dp else 24.dp))
+                                }
                             }
                         }
                     }
-                }
                 }
             }
         }
     }
-
+    
     if (contextMenuMessage != null) {
         ModalBottomSheet(
             onDismissRequest = { contextMenuMessage = null },
@@ -1236,6 +1255,7 @@ fun ChatScreen(
             )
         }
     }
+}
 }
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
