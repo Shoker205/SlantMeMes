@@ -23,6 +23,15 @@ import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.CheckCircle
@@ -139,6 +148,9 @@ fun ChatScreen(
     var initialAudioUrl by remember { mutableStateOf("") }
     var initialAudioName by remember { mutableStateOf("") }
     var pendingAttachments by remember { mutableStateOf<List<PendingAttachment>>(emptyList()) }
+    
+    val voicePlaybackViewModel = remember { VoicePlaybackManager() }
+    val currentlyPlayingVoice by voicePlaybackViewModel.currentVoice.collectAsState()
 
     val currentUser = FirebaseAuth.getInstance().currentUser ?: return
     val database = FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/")
@@ -294,7 +306,7 @@ fun ChatScreen(
     }
     
     fun uploadAndSendMessage(text: String, audioUri: android.net.Uri? = null) {
-        val attachmentsToUpload = pendingAttachments.toList() + (audioUri?.let { listOf(PendingAttachment(it, "audio")) } ?: emptyList())
+        val attachmentsToUpload = pendingAttachments.toList() + (audioUri?.let { listOf(PendingAttachment(it, "voice")) } ?: emptyList())
         if (attachmentsToUpload.isEmpty()) {
             if (text.isNotBlank()) sendMessage(text)
             return
@@ -326,7 +338,12 @@ fun ChatScreen(
                     if (uploadsCompleted == attachmentsToUpload.size) {
                         isUploading = false
                         val sendType = if (uploadedAttachments.size == 1 && text.isBlank()) pending.type else "media_group"
-                        sendMessage(text, type = sendType, attachments = uploadedAttachments)
+                        sendMessage(
+                            text = text,
+                            type = sendType,
+                            mediaUrl = uploadedAttachments.firstOrNull()?.url ?: "",
+                            attachments = uploadedAttachments
+                        )
                     }
                 }
             }
@@ -335,62 +352,68 @@ fun ChatScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { 
-                    androidx.compose.animation.AnimatedContent(targetState = selectedMessages.isNotEmpty(), label = "") { hasSelection ->
-                        if (hasSelection) {
-                            Text(selectedMessages.size.toString(), color = textColor, fontSize = 18.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                        } else {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.clickable { onProfileClick() }
-                            ) {
-                                Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(surfaceColor)) {
-                                    if (recipientAvatar.isNotBlank()) {
-                                        com.example.ui.components.AvatarImage(avatarUrl = recipientAvatar, contentDescription = null, modifier = Modifier.fillMaxSize())
+            Column {
+                TopAppBar(
+                    title = { 
+                        androidx.compose.animation.AnimatedContent(targetState = selectedMessages.isNotEmpty(), label = "") { hasSelection ->
+                            if (hasSelection) {
+                                Text(selectedMessages.size.toString(), color = textColor, fontSize = 18.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                            } else {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.clickable { onProfileClick() }
+                                ) {
+                                    Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(surfaceColor)) {
+                                        if (recipientAvatar.isNotBlank()) {
+                                            com.example.ui.components.AvatarImage(avatarUrl = recipientAvatar, contentDescription = null, modifier = Modifier.fillMaxSize())
+                                        }
                                     }
-                                }
-                                Spacer(Modifier.width(12.dp))
-                                Column(verticalArrangement = Arrangement.Center, modifier = Modifier.height(36.dp)) {
-                                    Text(recipientName, color = textColor, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, lineHeight = 20.sp)
-                                    if (recipientOnline) {
-                                        Text("онлайн", color = Color(0xFF4FC3F7), fontSize = 12.sp, lineHeight = 16.sp)
-                                    } else if (recipientLastSeen > 0L) {
-                                        val dateStr = java.text.SimpleDateFormat("HH:mm, dd MMM", java.util.Locale.getDefault()).format(java.util.Date(recipientLastSeen))
-                                        Text("был(а) $dateStr", color = dimTextColor, fontSize = 12.sp, lineHeight = 16.sp)
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(verticalArrangement = Arrangement.Center, modifier = Modifier.height(36.dp)) {
+                                        Text(recipientName, color = textColor, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, lineHeight = 20.sp)
+                                        if (recipientOnline) {
+                                            Text("онлайн", color = Color(0xFF4FC3F7), fontSize = 12.sp, lineHeight = 16.sp)
+                                        } else if (recipientLastSeen > 0L) {
+                                            val dateStr = java.text.SimpleDateFormat("HH:mm, dd MMM", java.util.Locale.getDefault()).format(java.util.Date(recipientLastSeen))
+                                            Text("был(а) $dateStr", color = dimTextColor, fontSize = 12.sp, lineHeight = 16.sp)
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                },
-                navigationIcon = {
-                    if (selectedMessages.isNotEmpty()) {
-                        IconButton(onClick = { selectedMessages = emptySet() }) {
-                            Icon(Icons.Default.Close, contentDescription = "Cancel", tint = textColor)
+                    },
+                    navigationIcon = {
+                        if (selectedMessages.isNotEmpty()) {
+                            IconButton(onClick = { selectedMessages = emptySet() }) {
+                                Icon(Icons.Default.Close, contentDescription = "Cancel", tint = textColor)
+                            }
+                        } else {
+                            IconButton(onClick = onBack) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = textColor)
+                            }
                         }
-                    } else {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = textColor)
+                    },
+                    actions = {
+                        if (selectedMessages.isNotEmpty()) {
+                            IconButton(onClick = { showForwardDialog = true }) {
+                                Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = "Forward", tint = textColor, modifier = Modifier.scale(scaleX = -1f, scaleY = 1f))
+                            }
+                            IconButton(onClick = { 
+                                val messagesRef = database.getReference("chats").child(chatId).child("messages")
+                                selectedMessages.forEach { id -> messagesRef.child(id).removeValue() }
+                                selectedMessages = emptySet()
+                            }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = textColor)
+                            }
                         }
-                    }
-                },
-                actions = {
-                    if (selectedMessages.isNotEmpty()) {
-                        IconButton(onClick = { showForwardDialog = true }) {
-                            Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = "Forward", tint = textColor, modifier = Modifier.scale(scaleX = -1f, scaleY = 1f))
-                        }
-                        IconButton(onClick = { 
-                            val messagesRef = database.getReference("chats").child(chatId).child("messages")
-                            selectedMessages.forEach { id -> messagesRef.child(id).removeValue() }
-                            selectedMessages = emptySet()
-                        }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = textColor)
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = surfaceColor)
-            )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = surfaceColor)
+                )
+                
+                if (currentlyPlayingVoice != null) {
+                    SmallVoicePlayer(currentlyPlayingVoice!!, voicePlaybackViewModel)
+                }
+            }
         },
         containerColor = bgColor
     ) { paddingValues ->
@@ -541,13 +564,14 @@ fun ChatScreen(
                                                         contentAlignment = Alignment.Center
                                                     ) {
                                                         if (isMedia) {
-                                                            if (attachment.url.startsWith("webrtc://")) {
+                                                            val resolvedUrl = com.example.utils.WebRtcDataChannel.getLocalFileUri(ctx, attachment.url)
+                                                            if (resolvedUrl.startsWith("webrtc://")) {
                                                                 Box(modifier = Modifier.fillMaxSize().background(Color.DarkGray), contentAlignment = Alignment.Center) {
                                                                     Icon(Icons.Default.Lock, contentDescription = "Encrypted", tint = Color.White, modifier = Modifier.size(24.dp))
                                                                 }
                                                             } else {
                                                                 coil.compose.AsyncImage(
-                                                                    model = attachment.url,
+                                                                    model = resolvedUrl,
                                                                     contentDescription = null,
                                                                     modifier = Modifier.fillMaxSize(),
                                                                     contentScale = androidx.compose.ui.layout.ContentScale.Crop
@@ -593,14 +617,15 @@ fun ChatScreen(
                                                     showFullscreenMedia = true
                                                 }
                                             }) {
-                                                if (msg.mediaUrl.startsWith("webrtc://")) {
+                                                val resolvedUrl = com.example.utils.WebRtcDataChannel.getLocalFileUri(ctx, msg.mediaUrl)
+                                                if (resolvedUrl.startsWith("webrtc://")) {
                                                     Box(modifier = Modifier.fillMaxSize().background(Color.DarkGray), contentAlignment = Alignment.Center) {
                                                         Icon(Icons.Default.Lock, contentDescription = "Encrypted", tint = Color.White, modifier = Modifier.size(32.dp))
                                                         Text("Секретное фото", color = Color.White, fontSize = 12.sp, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp))
                                                     }
                                                 } else {
                                                     coil.compose.AsyncImage(
-                                                        model = msg.mediaUrl,
+                                                        model = resolvedUrl,
                                                         contentDescription = null,
                                                         modifier = Modifier.fillMaxSize(),
                                                         contentScale = androidx.compose.ui.layout.ContentScale.Crop
@@ -655,7 +680,7 @@ fun ChatScreen(
                                             }
                                             Spacer(Modifier.width(12.dp))
                                             Column(modifier = Modifier.weight(1f)) {
-                                                val dispText = if (msg.text.isNotBlank()) msg.text else (if (isAudio) "Голосовое сообщение" else "Файл")
+                                                val dispText = if (msg.text.isNotBlank()) msg.text else "Файл"
                                                 Text(dispText, color = if (isMine) bubbleSentContentColor else textColor, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                                                 if (!isAudio) {
                                                     Text("Нажмите для скачивания", color = if (isMine) bubbleSentContentColor.copy(alpha=0.7f) else dimTextColor, fontSize = 11.sp)
@@ -666,6 +691,49 @@ fun ChatScreen(
                                             Spacer(Modifier.width(8.dp))
                                             IconButton(onClick = { MediaTools.downloadMedia(ctx, msg.mediaUrl, msg.type) }, modifier = Modifier.size(24.dp)) {
                                                 Icon(Icons.Default.Download, "Download", tint = if(isMine) bubbleSentContentColor else dimTextColor)
+                                            }
+                                        }
+                                    }
+                                }
+                                "voice" -> {
+                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.defaultMinSize(minWidth = 150.dp).padding(4.dp)) {
+                                        val isPlaying = currentlyPlayingVoice?.id == msg.id
+                                        val ctx = androidx.compose.ui.platform.LocalContext.current
+                                        Box(
+                                            modifier = Modifier.size(40.dp).clip(CircleShape).background(if (isMine) bgColor else Color(0xFF4FC3F7)).clickable {
+                                                if (isPlaying) {
+                                                    voicePlaybackViewModel.pause()
+                                                } else {
+                                                    val url = com.example.utils.WebRtcDataChannel.getLocalFileUri(ctx, msg.mediaUrl)
+                                                    voicePlaybackViewModel.play(msg, url)
+                                                }
+                                            },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(if (isPlaying && voicePlaybackViewModel.isPlaying.value) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = Color.White, modifier = Modifier.size(24.dp))
+                                        }
+                                        Spacer(Modifier.width(8.dp))
+                                        
+                                        // Static faked waveform based on seed
+                                        Canvas(modifier = Modifier.weight(1f).height(24.dp)) {
+                                            val seed = msg.id.hashCode()
+                                            val random = java.util.Random(seed.toLong())
+                                            val barWidth = 3.dp.toPx()
+                                            val space = 2.dp.toPx()
+                                            val bars = (size.width / (barWidth + space)).toInt()
+                                            val progress = if (isPlaying) voicePlaybackViewModel.progress.value else 0f
+                                            val passedBars = (bars * progress).toInt()
+                                            
+                                            for (i in 0 until bars) {
+                                                val x = i * (barWidth + space)
+                                                val amp = 0.2f + random.nextFloat() * 0.8f
+                                                val currentBarHeight = size.height * amp
+                                                drawRect(
+                                                    color = if (i <= passedBars && isPlaying) (if (isMine) bubbleSentContentColor else Color(0xFF4FC3F7)) else dimTextColor.copy(alpha=0.5f),
+                                                    topLeft = androidx.compose.ui.geometry.Offset(x, (size.height - currentBarHeight) / 2),
+                                                    size = androidx.compose.ui.geometry.Size(barWidth, currentBarHeight),
+                                                    style = androidx.compose.ui.graphics.drawscope.Fill
+                                                )
                                             }
                                         }
                                     }
@@ -851,22 +919,36 @@ fun ChatScreen(
                                 val sec = recordingSeconds % 60
                                 Text(String.format(java.util.Locale.US, "%d:%02d", min, sec), color = textColor, fontSize = 14.sp)
                                 
-                                val infiniteTransition = rememberInfiniteTransition()
-                                val wavePhase by infiniteTransition.animateFloat(initialValue = 0f, targetValue = 2 * Math.PI.toFloat(), animationSpec = infiniteRepeatable(animation = tween(1000, easing = LinearEasing), repeatMode = RepeatMode.Restart), label = "")
+                                val amplitudes = remember { androidx.compose.runtime.mutableStateListOf<Float>() }
+                                LaunchedEffect(isRecording) {
+                                    if (isRecording) {
+                                        amplitudes.clear()
+                                        while (isActive) {
+                                            kotlinx.coroutines.delay(50)
+                                            val amp = recorder.getMaxAmplitude()
+                                            // Max amplitude is normally up to 32767
+                                            val scaled = (amp / 10000f).coerceIn(0.1f, 1f)
+                                            amplitudes.add(scaled)
+                                            if (amplitudes.size > 40) amplitudes.removeAt(0)
+                                        }
+                                    }
+                                }
                                 
                                 Canvas(modifier = Modifier.weight(1f).height(24.dp).padding(horizontal = 8.dp)) {
                                     val barWidth = 3.dp.toPx()
                                     val space = 2.dp.toPx()
                                     val bars = (size.width / (barWidth + space)).toInt()
-                                    for (i in 0 until bars) {
-                                        val x = i * (barWidth + space)
-                                        val phaseOffset = i * 0.3f
-                                        val normalizedSine = (kotlin.math.sin(wavePhase + phaseOffset) + 1) / 2
-                                        val barHeight = (size.height * 0.3f) + (size.height * 0.7f) * normalizedSine
+                                    
+                                    val displayAmplitudes = amplitudes.takeLast(bars)
+                                    val paddingToRemove = bars - displayAmplitudes.size
+                                    
+                                    for (i in 0 until displayAmplitudes.size) {
+                                        val x = (i + paddingToRemove) * (barWidth + space)
+                                        val barHeight = size.height * displayAmplitudes[i]
                                         drawRect(
                                             color = Color(0xFF4FC3F7),
-                                            topLeft = Offset(x, (size.height - barHeight.toFloat()) / 2),
-                                            size = Size(barWidth, barHeight.toFloat())
+                                            topLeft = androidx.compose.ui.geometry.Offset(x, (size.height - barHeight) / 2),
+                                            size = androidx.compose.ui.geometry.Size(barWidth, barHeight)
                                         )
                                     }
                                 }
@@ -1348,9 +1430,179 @@ fun MediaViewer(mediaMessages: List<ChatMessage>, initialIndex: Int, onDismiss: 
     }
 }
 
+@Composable
+fun SmallVoicePlayer(msg: ChatMessage, viewModel: VoicePlaybackManager) {
+    val isPlaying by viewModel.isPlaying.collectAsState()
+    val speed by viewModel.speed.collectAsState()
+    val progress by viewModel.progress.collectAsState()
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF2C2C2C))
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(onClick = { if (isPlaying) viewModel.pause() else viewModel.play(msg, "") }, modifier = Modifier.size(36.dp)) {
+            Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = Color(0xFF4FC3F7))
+        }
+        Spacer(Modifier.width(8.dp))
+        
+        // Progress text
+        val dur = 0 // we don't have total duration easily here, just show a generic progress bar
+        Box(modifier = Modifier.weight(1f).height(4.dp).clip(CircleShape).background(Color.Gray.copy(alpha=0.5f))) {
+            Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(progress).background(Color(0xFF4FC3F7)))
+        }
+        
+        Spacer(Modifier.width(8.dp))
+        
+        // Speed control
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.DarkGray)
+                .clickable { viewModel.toggleSpeed() }
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("${speed}x", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+        
+        Spacer(Modifier.width(4.dp))
+        // Close
+        IconButton(onClick = { viewModel.stop() }, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.LightGray)
+        }
+    }
+}
+
+class VoicePlaybackManager {
+    val currentVoice = MutableStateFlow<ChatMessage?>(null)
+    val isPlaying = MutableStateFlow(false)
+    val progress = MutableStateFlow(0f)
+    var speed = MutableStateFlow(1f)
+    
+    private var mediaPlayer: android.media.MediaPlayer? = null
+    private var progressJob: kotlinx.coroutines.Job? = null
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    
+    fun play(msg: ChatMessage, uri: String) {
+        if (currentVoice.value?.id == msg.id) {
+            mediaPlayer?.start()
+            isPlaying.value = true
+            startProgress()
+            return
+        }
+        
+        stop()
+        currentVoice.value = msg
+        try {
+            val player = android.media.MediaPlayer()
+            mediaPlayer = player
+            player.setDataSource(uri)
+            player.prepareAsync()
+            player.setOnPreparedListener { 
+                it.start()
+                try {
+                    if (android.os.Build.VERSION.SDK_INT >= 23) {
+                        it.playbackParams = it.playbackParams.setSpeed(speed.value)
+                    }
+                } catch (e: Exception) {}
+                isPlaying.value = true
+                startProgress()
+            }
+            player.setOnCompletionListener {
+                isPlaying.value = false
+                progress.value = 1f
+                stopProgress()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+    
+    fun pause() {
+        mediaPlayer?.pause()
+        isPlaying.value = false
+        stopProgress()
+    }
+    
+    fun toggleSpeed() {
+        val newSpeed = if (speed.value == 1f) 1.5f else if (speed.value == 1.5f) 2f else 1f
+        speed.value = newSpeed
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 23) {
+                mediaPlayer?.let {
+                    if (it.isPlaying) {
+                        it.playbackParams = it.playbackParams.setSpeed(newSpeed)
+                    }
+                }
+            }
+        } catch (e: Exception) {}
+    }
+    
+    fun stop() {
+        mediaPlayer?.release()
+        mediaPlayer = null
+        currentVoice.value = null
+        isPlaying.value = false
+        progress.value = 0f
+        stopProgress()
+    }
+    
+    private fun startProgress() {
+        stopProgress()
+        progressJob = scope.launch {
+            while (isActive && isPlaying.value) {
+                mediaPlayer?.let {
+                    val pos = it.currentPosition
+                    val dur = it.duration
+                    if (dur > 0) {
+                        progress.value = pos.toFloat() / dur.toFloat()
+                    }
+                }
+                delay(50)
+            }
+        }
+    }
+    
+    private fun stopProgress() {
+        progressJob?.cancel()
+    }
+}
+
 object MediaTools {
+    fun openFile(ctx: android.content.Context, file: java.io.File, type: String) {
+        try {
+            val uri = androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.provider", file)
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, if (type.startsWith("image")) "image/*" else if (type.startsWith("video")) "video/*" else if (type.startsWith("audio") || type == "voice") "audio/*" else "*/*")
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (intent.resolveActivity(ctx.packageManager) != null) {
+                ctx.startActivity(intent)
+            } else {
+                android.widget.Toast.makeText(ctx, "Нет приложения для открытия файла", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(ctx, "Ошибка открытия файла", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
     fun downloadMedia(ctx: android.content.Context, url: String, type: String) {
         if (url.isBlank()) return
+        
+        // Try local file first
+        val resolvedUrl = com.example.utils.WebRtcDataChannel.getLocalFileUri(ctx, url)
+        if (resolvedUrl.startsWith("file://")) {
+            val file = java.io.File(android.net.Uri.parse(resolvedUrl).path ?: "")
+            if (file.exists()) {
+                openFile(ctx, file, type)
+                return
+            }
+        }
+        
         if (url.startsWith("webrtc://")) {
             val parts = url.replace("webrtc://", "").split("/")
             if (parts.size >= 2) {
@@ -1359,7 +1611,8 @@ object MediaTools {
                 android.widget.Toast.makeText(ctx, "Загрузка файла по P2P сети...", android.widget.Toast.LENGTH_SHORT).show()
                 com.example.utils.WebRtcDataChannel.downloadWebRtcFile(ctx, chatId, transferId) { file ->
                     if (file != null) {
-                        android.widget.Toast.makeText(ctx, "Файл загружен: ${file.absolutePath}", android.widget.Toast.LENGTH_LONG).show()
+                        android.widget.Toast.makeText(ctx, "Файл загружен", android.widget.Toast.LENGTH_SHORT).show()
+                        openFile(ctx, file, type)
                     } else {
                         android.widget.Toast.makeText(ctx, "Ошибка скачивания по P2P", android.widget.Toast.LENGTH_SHORT).show()
                     }

@@ -66,6 +66,10 @@ object WebRtcDataChannel {
                 
                 val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@launch
                 
+                // Cache locally for the sender to view
+                val cachedFile = File(context.cacheDir, filename)
+                cachedFile.writeBytes(bytes)
+                
                 val cipher = Cipher.getInstance("AES/ECB/PKCS5Padding")
                 cipher.init(Cipher.ENCRYPT_MODE, getAESKey(chatId))
                 val encryptedBytes = cipher.doFinal(bytes)
@@ -98,6 +102,19 @@ object WebRtcDataChannel {
                 Log.e("WebRtc", "Upload failed", e)
             }
         }
+    }
+
+    fun getLocalFileUri(context: Context, url: String): String {
+        if (!url.startsWith("webrtc://")) return url
+        val parts = url.replace("webrtc://", "").split("/")
+        if (parts.size >= 2) {
+            val transferId = parts[1]
+            val file = context.cacheDir.listFiles()?.firstOrNull { it.name.contains(transferId) }
+            if (file != null && file.exists()) {
+                return android.net.Uri.fromFile(file).toString()
+            }
+        }
+        return url
     }
 
     fun downloadWebRtcFile(context: Context, chatId: String, transferId: String, onComplete: (File?) -> Unit) {

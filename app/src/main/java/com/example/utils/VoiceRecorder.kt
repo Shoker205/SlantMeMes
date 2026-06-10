@@ -69,4 +69,12 @@ class VoiceRecorder(private val context: Context) {
             currentOutputFile = null
         }
     }
+
+    fun getMaxAmplitude(): Int {
+        return try {
+            recorder?.maxAmplitude ?: 0
+        } catch (e: Exception) {
+            0
+        }
+    }
 }
