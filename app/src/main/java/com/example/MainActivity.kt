@@ -12,6 +12,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.*
 import com.example.ui.theme.MyApplicationTheme
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
@@ -19,6 +20,16 @@ import com.google.accompanist.permissions.rememberPermissionState
 import androidx.compose.runtime.LaunchedEffect
 
 class MainActivity : ComponentActivity() {
+    override fun onResume() {
+        super.onResume()
+        PresenceManager.onAppForeground()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        PresenceManager.onAppBackground()
+    }
+
   @OptIn(ExperimentalPermissionsApi::class)
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -49,7 +60,14 @@ class MainActivity : ComponentActivity() {
 
       val isDarkTheme by AppPreferences.isDarkTheme.collectAsState()
       MyApplicationTheme(darkTheme = isDarkTheme) {
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Surface(modifier = Modifier.fillMaxSize().pointerInput(Unit) {
+            awaitPointerEventScope {
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    PresenceManager.markActive()
+                }
+            }
+        }, color = MaterialTheme.colorScheme.background) {
             MainAppNavigation()
         }
       }

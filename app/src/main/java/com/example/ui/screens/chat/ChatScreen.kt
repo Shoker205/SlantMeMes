@@ -302,40 +302,34 @@ fun ChatScreen(
         
         isUploading = true
         pendingAttachments = emptyList() // clear
-        val uploadedAttachments = mutableListOf<ChatAttachment>()
-        var uploadsCompleted = 0
         
-        val defaultText = when(attachmentsToUpload.first().type) {
-            "image" -> "[Фото]"
-            "video" -> "[Видео]"
-            "audio" -> "[Аудио]"
-            else -> "Файлы"
-        }
-        
-        attachmentsToUpload.forEach { pending ->
-            val storageRef = com.google.firebase.storage.FirebaseStorage.getInstance().reference.child("chats/$chatId/${System.currentTimeMillis()}_${pending.uri.lastPathSegment ?: "file"}")
-            storageRef.putFile(pending.uri)
-                .addOnSuccessListener {
-                    storageRef.downloadUrl.addOnSuccessListener { downloadUri ->
-                        uploadedAttachments.add(ChatAttachment(url = downloadUri.toString(), type = pending.type, filename = pending.uri.lastPathSegment ?: "file"))
-                        uploadsCompleted++
-                        if (uploadsCompleted == attachmentsToUpload.size) {
-                            isUploading = false
-                            val sendType = if (uploadedAttachments.size == 1 && text.isBlank()) pending.type else "media_group"
-                            sendMessage(if (text.isNotBlank()) text else defaultText, type = sendType, attachments = uploadedAttachments)
-                        }
-                    }
-                }
-                .addOnFailureListener {
+        // Background upload process that waits for recipient to be online
+        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+            // Wait for receiver to be online (simulating WebRTC requirement)
+            while (!recipientOnline) {
+                kotlinx.coroutines.delay(2000)
+            }
+            
+            val uploadedAttachments = mutableListOf<ChatAttachment>()
+            var uploadsCompleted = 0
+            
+            attachmentsToUpload.forEach { pending ->
+                com.example.utils.WebRtcDataChannel.initiateTransfer(
+                    context = ctx,
+                    chatId = chatId,
+                    senderId = currentUser?.uid ?: "",
+                    uri = pending.uri,
+                    type = pending.type
+                ) { downloadUri ->
+                    uploadedAttachments.add(ChatAttachment(url = downloadUri, type = pending.type, filename = pending.uri.lastPathSegment ?: "file"))
                     uploadsCompleted++
                     if (uploadsCompleted == attachmentsToUpload.size) {
                         isUploading = false
-                        if (uploadedAttachments.isNotEmpty()) {
-                            val sendType = if (uploadedAttachments.size == 1 && text.isBlank()) uploadedAttachments.first().type else "media_group"
-                            sendMessage(if (text.isNotBlank()) text else defaultText, type = sendType, attachments = uploadedAttachments)
-                        }
+                        val sendType = if (uploadedAttachments.size == 1 && text.isBlank()) pending.type else "media_group"
+                        sendMessage(text, type = sendType, attachments = uploadedAttachments)
                     }
                 }
+            }
         }
     }
 
@@ -547,12 +541,18 @@ fun ChatScreen(
                                                         contentAlignment = Alignment.Center
                                                     ) {
                                                         if (isMedia) {
-                                                            coil.compose.AsyncImage(
-                                                                model = attachment.url,
-                                                                contentDescription = null,
-                                                                modifier = Modifier.fillMaxSize(),
-                                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                                                            )
+                                                            if (attachment.url.startsWith("webrtc://")) {
+                                                                Box(modifier = Modifier.fillMaxSize().background(Color.DarkGray), contentAlignment = Alignment.Center) {
+                                                                    Icon(Icons.Default.Lock, contentDescription = "Encrypted", tint = Color.White, modifier = Modifier.size(24.dp))
+                                                                }
+                                                            } else {
+                                                                coil.compose.AsyncImage(
+                                                                    model = attachment.url,
+                                                                    contentDescription = null,
+                                                                    modifier = Modifier.fillMaxSize(),
+                                                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                                                )
+                                                            }
                                                             if (attachment.type.startsWith("video")) {
                                                                 Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha=0.3f)), contentAlignment = Alignment.Center) {
                                                                     Icon(Icons.Default.Videocam, null, tint = Color.White, modifier = Modifier.size(32.dp))
@@ -593,12 +593,19 @@ fun ChatScreen(
                                                     showFullscreenMedia = true
                                                 }
                                             }) {
-                                                coil.compose.AsyncImage(
-                                                    model = msg.mediaUrl,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.fillMaxSize(),
-                                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                                                )
+                                                if (msg.mediaUrl.startsWith("webrtc://")) {
+                                                    Box(modifier = Modifier.fillMaxSize().background(Color.DarkGray), contentAlignment = Alignment.Center) {
+                                                        Icon(Icons.Default.Lock, contentDescription = "Encrypted", tint = Color.White, modifier = Modifier.size(32.dp))
+                                                        Text("Секретное фото", color = Color.White, fontSize = 12.sp, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp))
+                                                    }
+                                                } else {
+                                                    coil.compose.AsyncImage(
+                                                        model = msg.mediaUrl,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.fillMaxSize(),
+                                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                                    )
+                                                }
                                                 if (msg.type == "video") {
                                                     Box(
                                                         modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)),
@@ -617,10 +624,12 @@ fun ChatScreen(
                                             }
                                             Spacer(Modifier.height(4.dp))
                                         }
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(if (msg.type == "image") Icons.Default.Image else Icons.Default.Videocam, contentDescription = null, tint = if (isMine) bubbleSentContentColor else textColor, modifier = Modifier.size(16.dp))
-                                            Spacer(Modifier.width(4.dp))
-                                            Text(msg.text, color = if (isMine) bubbleSentContentColor else textColor, fontSize = 14.sp)
+                                        if (msg.text.isNotBlank()) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(if (msg.type == "image") Icons.Default.Image else Icons.Default.Videocam, contentDescription = null, tint = if (isMine) bubbleSentContentColor else textColor, modifier = Modifier.size(16.dp))
+                                                Spacer(Modifier.width(4.dp))
+                                                Text(msg.text, color = if (isMine) bubbleSentContentColor else textColor, fontSize = 14.sp)
+                                            }
                                         }
                                     }
                                 }
@@ -634,7 +643,7 @@ fun ChatScreen(
                                             modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable {
                                                 if (isAudio) {
                                                     initialAudioUrl = msg.mediaUrl
-                                                    initialAudioName = msg.text
+                                                    initialAudioName = if (msg.text.isNotBlank()) msg.text else "Голосовое сообщение"
                                                     showAudioPlayer = true
                                                 } else {
                                                     MediaTools.downloadMedia(ctx, msg.mediaUrl, "file")
@@ -646,7 +655,8 @@ fun ChatScreen(
                                             }
                                             Spacer(Modifier.width(12.dp))
                                             Column(modifier = Modifier.weight(1f)) {
-                                                Text(msg.text, color = if (isMine) bubbleSentContentColor else textColor, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                                val dispText = if (msg.text.isNotBlank()) msg.text else (if (isAudio) "Голосовое сообщение" else "Файл")
+                                                Text(dispText, color = if (isMine) bubbleSentContentColor else textColor, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                                                 if (!isAudio) {
                                                     Text("Нажмите для скачивания", color = if (isMine) bubbleSentContentColor.copy(alpha=0.7f) else dimTextColor, fontSize = 11.sp)
                                                 } else {
@@ -880,8 +890,7 @@ fun ChatScreen(
                             Row(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .defaultMinSize(minHeight = 40.dp)
-                                    .padding(vertical = 10.dp, horizontal = 4.dp),
+                                    .padding(vertical = 8.dp, horizontal = 0.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 BasicTextField(
@@ -889,7 +898,7 @@ fun ChatScreen(
                                     onValueChange = { inputText = it },
                                     textStyle = androidx.compose.ui.text.TextStyle(color = textColor, fontSize = 16.sp),
                                     maxLines = 5,
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier.weight(1f).padding(start = 4.dp, end = 4.dp),
                                     decorationBox = { innerTextField ->
                                         if (inputText.isEmpty()) {
                                             Text("Сообщение...", color = dimTextColor, fontSize = 16.sp)
@@ -925,32 +934,28 @@ fun ChatScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     if (inputText.isNotBlank() || pendingAttachments.isNotEmpty()) {
-                                        Box(
-                                        modifier = Modifier.fillMaxSize().pointerInput(inputText, pendingAttachments, isRecordingLocked) {
-                                            detectTapGestures {
+                                        IconButton(
+                                            onClick = {
                                                 uploadAndSendMessage(inputText.trim())
                                                 inputText = ""
-                                            }
-                                        },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Color(0xFF4FC3F7), modifier = Modifier.size(24.dp))
-                                    }
-                                } else if (isRecordingLocked) {
-                                    Box(
-                                        modifier = Modifier.fillMaxSize().pointerInput(isRecordingLocked) {
-                                            detectTapGestures {
+                                            },
+                                            modifier = Modifier.fillMaxSize()
+                                        ) {
+                                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Color(0xFF4FC3F7), modifier = Modifier.size(24.dp))
+                                        }
+                                    } else if (isRecordingLocked) {
+                                        IconButton(
+                                            onClick = {
                                                 recorder.cancelRecording()
                                                 isRecording = false
                                                 isRecordingLocked = false
-                                            }
-                                        },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.Red, modifier = Modifier.size(24.dp))
-                                    }
-                                } else {
-                                    Box(
+                                            },
+                                            modifier = Modifier.fillMaxSize()
+                                        ) {
+                                            Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.Red, modifier = Modifier.size(24.dp))
+                                        }
+                                    } else {
+                                        Box(
                                         modifier = Modifier.fillMaxSize().pointerInput(Unit) {
                                             detectDragGestures(
                                                 onDragStart = { 
@@ -1346,6 +1351,23 @@ fun MediaViewer(mediaMessages: List<ChatMessage>, initialIndex: Int, onDismiss: 
 object MediaTools {
     fun downloadMedia(ctx: android.content.Context, url: String, type: String) {
         if (url.isBlank()) return
+        if (url.startsWith("webrtc://")) {
+            val parts = url.replace("webrtc://", "").split("/")
+            if (parts.size >= 2) {
+                val chatId = parts[0]
+                val transferId = parts[1]
+                android.widget.Toast.makeText(ctx, "Загрузка файла по P2P сети...", android.widget.Toast.LENGTH_SHORT).show()
+                com.example.utils.WebRtcDataChannel.downloadWebRtcFile(ctx, chatId, transferId) { file ->
+                    if (file != null) {
+                        android.widget.Toast.makeText(ctx, "Файл загружен: ${file.absolutePath}", android.widget.Toast.LENGTH_LONG).show()
+                    } else {
+                        android.widget.Toast.makeText(ctx, "Ошибка скачивания по P2P", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+                return
+            }
+        }
+        
         try {
             val request = android.app.DownloadManager.Request(android.net.Uri.parse(url))
             val ext = when(type) {
