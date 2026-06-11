@@ -437,7 +437,17 @@ fun ChatScreen(
                     val isHighlighted = highlightedMessageId == msg.id
                     var swipeOffset by remember { mutableFloatStateOf(0f) }
                     
-                    Box(modifier = Modifier.fillMaxWidth().animateItemPlacement(), contentAlignment = Alignment.CenterEnd) {
+                    val ctx = androidx.compose.ui.platform.LocalContext.current
+                    LaunchedEffect(msg.mediaUrl) {
+                        if (msg.mediaUrl.startsWith("webrtc://") && !isMine) {
+                            val parts = msg.mediaUrl.replace("webrtc://", "").split("/")
+                            if (parts.size >= 2) {
+                                com.example.utils.WebRtcDataChannel.downloadWebRtcFile(ctx, parts[0], parts[1]) { }
+                            }
+                        }
+                    }
+                    
+                    Box(modifier = Modifier.fillMaxWidth().animateItem(), contentAlignment = Alignment.CenterEnd) {
                         if (swipeOffset < -20f) {
                             Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = "Reply", tint = dimTextColor, modifier = Modifier.padding(end = 16.dp).size(24.dp).scale(scaleX = -1f, scaleY = 1f))
                         }
@@ -490,6 +500,8 @@ fun ChatScreen(
                                 }
                             }
                         }
+                        val isOnlyMedia = (msg.type == "image" || msg.type == "video") && msg.text.isBlank() && msg.attachments.isEmpty() && msg.replyToMsgId == null
+                        
                         Column(
                             modifier = Modifier
                                 .widthIn(max = 280.dp)
@@ -499,8 +511,8 @@ fun ChatScreen(
                                     bottomStart = if (isMine) 16.dp else 4.dp, 
                                     bottomEnd = if (isMine) 4.dp else 16.dp
                                 ))
-                                .background(if (isMine) bubbleSentBgColor else bubbleReceivedColor)
-                                .padding(horizontal = 14.dp, vertical = 10.dp)
+                                .background(if (isOnlyMedia) Color.Transparent else if (isMine) bubbleSentBgColor else bubbleReceivedColor)
+                                .padding(horizontal = if (isOnlyMedia) 0.dp else 14.dp, vertical = if (isOnlyMedia) 0.dp else 10.dp)
                         ) {
                             if (msg.replyToMsgId != null) {
                                 val replyMsg = messages.find { it.id == msg.replyToMsgId }
@@ -680,8 +692,11 @@ fun ChatScreen(
                                             }
                                             Spacer(Modifier.width(12.dp))
                                             Column(modifier = Modifier.weight(1f)) {
-                                                val dispText = if (msg.text.isNotBlank()) msg.text else "Файл"
-                                                Text(dispText, color = if (isMine) bubbleSentContentColor else textColor, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                                val dispText = if (msg.text.isNotBlank()) msg.text else {
+                                                    val urlParts = msg.mediaUrl.replace("webrtc://", "").split("/")
+                                                    if(urlParts.size >= 3) java.net.URLDecoder.decode(urlParts.last(), "UTF-8") else "Файл"
+                                                }
+                                                Text(with(MediaTools) { dispText.ellipsizeMiddle(25) }, color = if (isMine) bubbleSentContentColor else textColor, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                                                 if (!isAudio) {
                                                     Text("Нажмите для скачивания", color = if (isMine) bubbleSentContentColor.copy(alpha=0.7f) else dimTextColor, fontSize = 11.sp)
                                                 } else {
@@ -1363,23 +1378,40 @@ fun MediaViewer(mediaMessages: List<ChatMessage>, initialIndex: Int, onDismiss: 
                 modifier = Modifier.fillMaxSize()
             ) { page ->
                 val msg = mediaMessages[page]
+                val resolvedUrl = com.example.utils.WebRtcDataChannel.getLocalFileUri(ctx, msg.mediaUrl)
+                var isVideoPlaying by remember { mutableStateOf(false) }
+                
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    if (msg.type == "image" || msg.type == "video") {
+                    if (msg.type == "video" || msg.type.startsWith("video")) {
+                        if (isVideoPlaying) {
+                            androidx.compose.ui.viewinterop.AndroidView(factory = { context ->
+                                android.widget.VideoView(context).apply {
+                                    setVideoURI(android.net.Uri.parse(resolvedUrl))
+                                    val mediaController = android.widget.MediaController(context)
+                                    mediaController.setAnchorView(this)
+                                    setMediaController(mediaController)
+                                    start()
+                                }
+                            }, modifier = Modifier.fillMaxSize())
+                        } else {
+                            // Show thumbnail or fallback
+                            coil.compose.AsyncImage(
+                                model = resolvedUrl, // Coil handles video frames
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                            )
+                            IconButton(onClick = { isVideoPlaying = true }, modifier = Modifier.align(Alignment.Center).size(64.dp).background(Color.Black.copy(alpha=0.5f), CircleShape)) {
+                                Icon(Icons.Default.PlayArrow, "Play", tint = Color.White, modifier = Modifier.size(32.dp))
+                            }
+                        }
+                    } else if (msg.type == "image" || msg.type.startsWith("image")) {
                         coil.compose.AsyncImage(
-                            model = msg.mediaUrl,
+                            model = resolvedUrl,
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = androidx.compose.ui.layout.ContentScale.Fit
                         )
-                        if (msg.type == "video") {
-                            IconButton(onClick = {
-                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
-                                intent.setDataAndType(android.net.Uri.parse(msg.mediaUrl), "video/*")
-                                ctx.startActivity(intent)
-                            }, modifier = Modifier.align(Alignment.Center).size(64.dp).background(Color.Black.copy(alpha=0.5f), CircleShape)) {
-                                Icon(Icons.Default.Videocam, "Play", tint = Color.White, modifier = Modifier.size(32.dp))
-                            }
-                        }
                     }
                 }
             }
@@ -1435,43 +1467,75 @@ fun SmallVoicePlayer(msg: ChatMessage, viewModel: VoicePlaybackManager) {
     val isPlaying by viewModel.isPlaying.collectAsState()
     val speed by viewModel.speed.collectAsState()
     val progress by viewModel.progress.collectAsState()
+    var showSpeedMenu by remember { mutableStateOf(false) }
     
+    val speeds = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 3f)
+
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFF2C2C2C))
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .background(Color(0xFF202020))
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = { if (isPlaying) viewModel.pause() else viewModel.play(msg, "") }, modifier = Modifier.size(36.dp)) {
-            Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = Color(0xFF4FC3F7))
+        IconButton(
+            onClick = { 
+                if (isPlaying) viewModel.pause() else {
+                    val resolved = com.example.utils.WebRtcDataChannel.getLocalFileUri(ctx, msg.mediaUrl)
+                    viewModel.play(msg, resolved)
+                }
+            },
+            modifier = Modifier.size(32.dp).clip(CircleShape).background(Color(0xFF4FC3F7))
+        ) {
+            Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = Color.White, modifier = Modifier.size(20.dp))
         }
         Spacer(Modifier.width(8.dp))
         
-        // Progress text
-        val dur = 0 // we don't have total duration easily here, just show a generic progress bar
-        Box(modifier = Modifier.weight(1f).height(4.dp).clip(CircleShape).background(Color.Gray.copy(alpha=0.5f))) {
-            Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(progress).background(Color(0xFF4FC3F7)))
+        Column(modifier = Modifier.weight(1f)) {
+            val titleText = if (msg.type == "voice") "Голосовое сообщение" else msg.text.ifBlank { "Аудио" }
+            Text(titleText, color = Color.White, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            Spacer(Modifier.height(4.dp))
+            Box(modifier = Modifier.fillMaxWidth().height(3.dp).clip(CircleShape).background(Color.Gray.copy(alpha=0.5f))) {
+                Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(progress).background(Color(0xFF4FC3F7)))
+            }
         }
         
         Spacer(Modifier.width(8.dp))
         
         // Speed control
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color.DarkGray)
-                .clickable { viewModel.toggleSpeed() }
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("${speed}x", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Box {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (speed != 1f) Color(0xFF4FC3F7).copy(alpha=0.2f) else Color.Transparent)
+                    .clickable { showSpeedMenu = true }
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("${if(speed == speed.toLong().toFloat()) speed.toLong() else speed}x", color = if (speed != 1f) Color(0xFF4FC3F7) else Color.LightGray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+            androidx.compose.material3.DropdownMenu(
+                expanded = showSpeedMenu,
+                onDismissRequest = { showSpeedMenu = false },
+                modifier = Modifier.background(Color(0xFF333333))
+            ) {
+                speeds.forEach { s ->
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text("${if(s == s.toLong().toFloat()) s.toLong() else s}x", color = Color.White) },
+                        onClick = {
+                            viewModel.setSpeed(s)
+                            showSpeedMenu = false
+                        }
+                    )
+                }
+            }
         }
         
         Spacer(Modifier.width(4.dp))
-        // Close
-        IconButton(onClick = { viewModel.stop() }, modifier = Modifier.size(36.dp)) {
-            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.LightGray)
+        IconButton(onClick = { viewModel.stop() }, modifier = Modifier.size(32.dp)) {
+            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.LightGray, modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -1527,8 +1591,7 @@ class VoicePlaybackManager {
         stopProgress()
     }
     
-    fun toggleSpeed() {
-        val newSpeed = if (speed.value == 1f) 1.5f else if (speed.value == 1.5f) 2f else 1f
+    fun setSpeed(newSpeed: Float) {
         speed.value = newSpeed
         try {
             if (android.os.Build.VERSION.SDK_INT >= 23) {
@@ -1572,6 +1635,19 @@ class VoicePlaybackManager {
 }
 
 object MediaTools {
+    fun String.ellipsizeMiddle(maxLength: Int = 20): String {
+        if (this.length <= maxLength) return this
+        val extIdx = this.lastIndexOf('.')
+        val ext = if (extIdx != -1) this.substring(extIdx) else ""
+        val name = if (extIdx != -1) this.substring(0, extIdx) else this
+        
+        val keepNameLen = maxLength - ext.length - 3 // 3 for "..."
+        if (keepNameLen <= 0) return this.take(maxLength)
+        val front = name.take(keepNameLen / 2 + keepNameLen % 2)
+        val back = name.takeLast(keepNameLen / 2)
+        return "$front...$back$ext"
+    }
+
     fun openFile(ctx: android.content.Context, file: java.io.File, type: String) {
         try {
             val uri = androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.provider", file)

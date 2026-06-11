@@ -62,7 +62,25 @@ object WebRtcDataChannel {
         scope.launch {
             try {
                 val transferId = System.currentTimeMillis().toString()
-                val filename = "peer_file_${transferId}.${if (type == "image") "jpg" else if (type == "video") "mp4" else if (type == "audio") "m4a" else "bin"}"
+                
+                var originalFilename = "peer_file_${transferId}"
+                if (uri.scheme == "content") {
+                    context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                            if (nameIndex != -1) {
+                                originalFilename = cursor.getString(nameIndex)
+                            }
+                        }
+                    }
+                } else if (uri.scheme == "file") {
+                    originalFilename = File(uri.path ?: "").name
+                }
+                if (!originalFilename.contains(".")) {
+                    originalFilename += ".${if (type == "image") "jpg" else if (type == "video") "mp4" else if (type == "voice") "m4a" else "bin"}"
+                }
+                
+                val filename = originalFilename
                 
                 val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@launch
                 
@@ -94,7 +112,8 @@ object WebRtcDataChannel {
 
                 ref.child("metadata").child("ready").setValueSuspend(true)
                 
-                val downloadedUri = "webrtc://$chatId/$transferId"
+                val safename = java.net.URLEncoder.encode(filename, "UTF-8")
+                val downloadedUri = "webrtc://$chatId/$transferId/$safename"
                 withContext(Dispatchers.Main) {
                     onComplete(downloadedUri)
                 }

@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -47,12 +48,39 @@ fun CustomAudioPlayer(
     val mediaPlayer = remember { MediaPlayer() }
     
     val currentMsg = audioMessages.getOrNull(currentIndex)
+    var songTitle by remember { mutableStateOf("") }
+    var songArtist by remember { mutableStateOf("") }
+    var songCover by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     
     LaunchedEffect(currentIndex, currentMsg) {
         if (currentMsg == null) return@LaunchedEffect
+        val resolvedUrl = com.example.utils.WebRtcDataChannel.getLocalFileUri(ctx, currentMsg.mediaUrl)
+        
+        songTitle = currentMsg.text.ifBlank { "Аудио" }
+        songArtist = getSenderName(currentMsg.senderId)
+        songCover = null
+        
+        if (!resolvedUrl.startsWith("webrtc://")) {
+            try {
+                val mmr = android.media.MediaMetadataRetriever()
+                mmr.setDataSource(ctx, android.net.Uri.parse(resolvedUrl))
+                val extTitle = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_TITLE)
+                val extArtist = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST)
+                val extCoverBytes = mmr.embeddedPicture
+                if (extTitle != null) songTitle = extTitle
+                if (extArtist != null) songArtist = extArtist
+                if (extCoverBytes != null) {
+                    songCover = android.graphics.BitmapFactory.decodeByteArray(extCoverBytes, 0, extCoverBytes.size)
+                }
+                mmr.release()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        
         try {
             mediaPlayer.reset()
-            mediaPlayer.setDataSource(currentMsg.mediaUrl)
+            mediaPlayer.setDataSource(ctx, android.net.Uri.parse(resolvedUrl))
             mediaPlayer.prepareAsync()
             mediaPlayer.setOnPreparedListener {
                 duration = it.duration
@@ -126,15 +154,24 @@ fun CustomAudioPlayer(
                         .background(Color.DarkGray),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.Audiotrack, contentDescription = null, tint = Color.LightGray, modifier = Modifier.size(120.dp))
+                    if (songCover != null) {
+                        androidx.compose.foundation.Image(
+                            bitmap = songCover!!.asImageBitmap(),
+                            contentDescription = "Cover",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                        )
+                    } else {
+                        Icon(Icons.Default.Audiotrack, contentDescription = null, tint = Color.LightGray, modifier = Modifier.size(120.dp))
+                    }
                 }
 
                 Spacer(Modifier.height(48.dp))
 
                 // Title and Author
                 Column(modifier = Modifier.padding(horizontal = 32.dp)) {
-                    Text(currentMsg?.text ?: "Аудио", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                    Text(currentMsg?.let { getSenderName(it.senderId) } ?: "Неизвестно", color = Color.Gray, fontSize = 16.sp, modifier = Modifier.padding(top = 8.dp))
+                    Text(songTitle, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    Text(songArtist, color = Color.Gray, fontSize = 16.sp, modifier = Modifier.padding(top = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
 
                 Spacer(Modifier.height(32.dp))
