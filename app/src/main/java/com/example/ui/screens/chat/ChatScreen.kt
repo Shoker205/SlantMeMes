@@ -372,7 +372,7 @@ fun ChatScreen(
                                     Column(verticalArrangement = Arrangement.Center, modifier = Modifier.height(36.dp)) {
                                         Text(recipientName, color = textColor, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, lineHeight = 20.sp)
                                         if (recipientOnline) {
-                                            Text("онлайн", color = Color(0xFF4FC3F7), fontSize = 12.sp, lineHeight = 16.sp)
+                                            Text("онлайн", color = textColor, fontSize = 12.sp, lineHeight = 16.sp)
                                         } else if (recipientLastSeen > 0L) {
                                             val dateStr = java.text.SimpleDateFormat("HH:mm, dd MMM", java.util.Locale.getDefault()).format(java.util.Date(recipientLastSeen))
                                             Text("был(а) $dateStr", color = dimTextColor, fontSize = 12.sp, lineHeight = 16.sp)
@@ -493,7 +493,7 @@ fun ChatScreen(
                     ) {
                         if (isMine) {
                             Row(modifier = Modifier.padding(end = 4.dp, bottom = 4.dp)) {
-                                val iconTint = if (msg.isRead) Color(0xFF4FC3F7) else dimTextColor
+                                val iconTint = if (msg.isRead) textColor else dimTextColor
                                 Icon(Icons.Default.Check, contentDescription = "Tick", tint = iconTint, modifier = Modifier.size(16.dp))
                                 if (msg.isRead) {
                                     Icon(Icons.Default.Check, contentDescription = "Read", tint = iconTint, modifier = Modifier.size(16.dp).offset(x = (-8).dp))
@@ -537,10 +537,10 @@ fun ChatScreen(
                                             .padding(6.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Box(modifier = Modifier.width(3.dp).height(24.dp).background(Color(0xFF4FC3F7), RoundedCornerShape(1.dp)))
+                                        Box(modifier = Modifier.width(3.dp).height(24.dp).background(if(isMine) bubbleSentContentColor else textColor, RoundedCornerShape(1.dp)))
                                         Spacer(Modifier.width(6.dp))
                                         Column {
-                                            Text(if (replyMsg.senderId == currentUser.uid) "Вы" else recipientName, color = Color(0xFF4FC3F7), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            Text(if (replyMsg.senderId == currentUser.uid) "Вы" else recipientName, color = if(isMine) bubbleSentContentColor else textColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                             Text(replyMsg.text, color = if (isMine) bubbleSentContentColor else textColor, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                                         }
                                     }
@@ -715,7 +715,7 @@ fun ChatScreen(
                                         val isPlaying = currentlyPlayingVoice?.id == msg.id
                                         val ctx = androidx.compose.ui.platform.LocalContext.current
                                         Box(
-                                            modifier = Modifier.size(40.dp).clip(CircleShape).background(if (isMine) bgColor else Color(0xFF4FC3F7)).clickable {
+                                            modifier = Modifier.size(40.dp).clip(CircleShape).background(if (isMine) bgColor else textColor).clickable {
                                                 if (isPlaying) {
                                                     voicePlaybackViewModel.pause()
                                                 } else {
@@ -744,7 +744,7 @@ fun ChatScreen(
                                                 val amp = 0.2f + random.nextFloat() * 0.8f
                                                 val currentBarHeight = size.height * amp
                                                 drawRect(
-                                                    color = if (i <= passedBars && isPlaying) (if (isMine) bubbleSentContentColor else Color(0xFF4FC3F7)) else dimTextColor.copy(alpha=0.5f),
+                                                    color = if (i <= passedBars && isPlaying) (if (isMine) bubbleSentContentColor else textColor) else dimTextColor.copy(alpha=0.5f),
                                                     topLeft = androidx.compose.ui.geometry.Offset(x, (size.height - currentBarHeight) / 2),
                                                     size = androidx.compose.ui.geometry.Size(barWidth, currentBarHeight),
                                                     style = androidx.compose.ui.graphics.drawscope.Fill
@@ -805,7 +805,7 @@ fun ChatScreen(
                         }
                     }
                     androidx.compose.animation.AnimatedVisibility(visible = isUploading) {
-                        Text("Загрузка медиа...", color = Color(0xFF4FC3F7), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                        Text("Загрузка медиа...", color = textColor, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                     }
                     androidx.compose.animation.AnimatedVisibility(visible = replyToMessage != null) {
                         if (replyToMessage != null) {
@@ -816,7 +816,7 @@ fun ChatScreen(
                                 Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null, tint = dimTextColor, modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("В ответ на", color = Color(0xFF4FC3F7), fontSize = 12.sp)
+                                    Text("В ответ на", color = textColor, fontSize = 12.sp)
                                     Text(replyToMessage!!.text, color = textColor, fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                                 }
                                 IconButton(onClick = { replyToMessage = null }, modifier = Modifier.size(24.dp)) {
@@ -834,7 +834,7 @@ fun ChatScreen(
                                 Icon(Icons.Default.Edit, contentDescription = null, tint = dimTextColor, modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("Редактирование", color = Color(0xFF4FC3F7), fontSize = 12.sp)
+                                    Text("Редактирование", color = textColor, fontSize = 12.sp)
                                     Text(messageToEdit!!.text, color = textColor, fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                                 }
                                 IconButton(onClick = { messageToEdit = null; inputText = "" }, modifier = Modifier.size(24.dp)) {
@@ -961,7 +961,7 @@ fun ChatScreen(
                                         val x = (i + paddingToRemove) * (barWidth + space)
                                         val barHeight = size.height * displayAmplitudes[i]
                                         drawRect(
-                                            color = Color(0xFF4FC3F7),
+                                            color = textColor,
                                             topLeft = androidx.compose.ui.geometry.Offset(x, (size.height - barHeight) / 2),
                                             size = androidx.compose.ui.geometry.Size(barWidth, barHeight)
                                         )
@@ -979,7 +979,7 @@ fun ChatScreen(
                                         isRecording = false
                                         isRecordingLocked = false
                                     }) {
-                                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Color(0xFF4FC3F7))
+                                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = textColor)
                                     }
                                 }
                             }
@@ -1038,7 +1038,7 @@ fun ChatScreen(
                                             },
                                             modifier = Modifier.fillMaxSize()
                                         ) {
-                                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Color(0xFF4FC3F7), modifier = Modifier.size(24.dp))
+                                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = textColor, modifier = Modifier.size(24.dp))
                                         }
                                     } else if (isRecordingLocked) {
                                         IconButton(
@@ -1469,6 +1469,11 @@ fun SmallVoicePlayer(msg: ChatMessage, viewModel: VoicePlaybackManager) {
     val progress by viewModel.progress.collectAsState()
     var showSpeedMenu by remember { mutableStateOf(false) }
     
+    val isDarkTheme by com.example.AppPreferences.isDarkTheme.collectAsState(initial = true)
+    val textColor = if (isDarkTheme) Color.White else Color.Black
+    val bgColor = if (isDarkTheme) Color.Black else Color.White
+    val surfaceColor = if (isDarkTheme) Color(0xFF2C2C2C) else Color(0xFFE5E5EA)
+    
     val speeds = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 3f)
 
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -1476,7 +1481,7 @@ fun SmallVoicePlayer(msg: ChatMessage, viewModel: VoicePlaybackManager) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFF202020))
+            .background(surfaceColor)
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1487,18 +1492,18 @@ fun SmallVoicePlayer(msg: ChatMessage, viewModel: VoicePlaybackManager) {
                     viewModel.play(msg, resolved)
                 }
             },
-            modifier = Modifier.size(32.dp).clip(CircleShape).background(Color(0xFF4FC3F7))
+            modifier = Modifier.size(32.dp).clip(CircleShape).background(textColor)
         ) {
-            Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = Color.White, modifier = Modifier.size(20.dp))
+            Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = bgColor, modifier = Modifier.size(20.dp))
         }
         Spacer(Modifier.width(8.dp))
         
         Column(modifier = Modifier.weight(1f)) {
             val titleText = if (msg.type == "voice") "Голосовое сообщение" else msg.text.ifBlank { "Аудио" }
-            Text(titleText, color = Color.White, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            Text(titleText, color = textColor, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             Spacer(Modifier.height(4.dp))
             Box(modifier = Modifier.fillMaxWidth().height(3.dp).clip(CircleShape).background(Color.Gray.copy(alpha=0.5f))) {
-                Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(progress).background(Color(0xFF4FC3F7)))
+                Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(progress).background(textColor))
             }
         }
         
@@ -1509,12 +1514,12 @@ fun SmallVoicePlayer(msg: ChatMessage, viewModel: VoicePlaybackManager) {
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .background(if (speed != 1f) Color(0xFF4FC3F7).copy(alpha=0.2f) else Color.Transparent)
+                    .background(if (speed != 1f) textColor.copy(alpha=0.2f) else Color.Transparent)
                     .clickable { showSpeedMenu = true }
                     .padding(horizontal = 6.dp, vertical = 4.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("${if(speed == speed.toLong().toFloat()) speed.toLong() else speed}x", color = if (speed != 1f) Color(0xFF4FC3F7) else Color.LightGray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("${if(speed == speed.toLong().toFloat()) speed.toLong() else speed}x", color = if (speed != 1f) textColor else Color.LightGray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
             androidx.compose.material3.DropdownMenu(
                 expanded = showSpeedMenu,

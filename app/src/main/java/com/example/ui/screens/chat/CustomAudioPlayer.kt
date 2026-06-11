@@ -197,7 +197,7 @@ fun CustomAudioPlayer(
                             Spacer(Modifier.height(8.dp))
                             androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxWidth().height(3.dp).clip(CircleShape).background(dimTextColor.copy(alpha=0.3f))) {
                                 val prog = if(progress.isNaN()) 0f else progress
-                                drawRect(color = Color(0xFF4FC3F7), size = androidx.compose.ui.geometry.Size(size.width * prog, size.height))
+                                drawRect(color = textColor, size = androidx.compose.ui.geometry.Size(size.width * prog, size.height))
                             }
                         }
 
@@ -205,10 +205,10 @@ fun CustomAudioPlayer(
                         
                         // Play/Pause button
                         Box(
-                            modifier = Modifier.size(48.dp).clip(CircleShape).background(Color(0xFF4FC3F7)).clickable { isPlaying = !isPlaying },
+                            modifier = Modifier.size(48.dp).clip(CircleShape).background(textColor).clickable { isPlaying = !isPlaying },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = Color.Black)
+                            Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = bgColor)
                         }
                     }
                     Spacer(Modifier.weight(1f))
@@ -274,8 +274,8 @@ fun CustomAudioPlayer(
                             },
                             modifier = Modifier.padding(horizontal = 24.dp),
                             colors = SliderDefaults.colors(
-                                thumbColor = Color(0xFF4FC3F7),
-                                activeTrackColor = Color(0xFF4FC3F7),
+                                thumbColor = textColor,
+                                activeTrackColor = textColor,
                                 inactiveTrackColor = surfaceColor
                             )
                         )
@@ -298,7 +298,7 @@ fun CustomAudioPlayer(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(onClick = { shuffle = !shuffle }) {
-                                Icon(Icons.Default.Shuffle, contentDescription = "Shuffle", tint = if (shuffle) Color(0xFF4FC3F7) else textColor)
+                                Icon(Icons.Default.Shuffle, contentDescription = "Shuffle", tint = if (shuffle) textColor else dimTextColor)
                             }
                             IconButton(onClick = { 
                                 if (currentIndex > 0) currentIndex-- 
@@ -309,11 +309,11 @@ fun CustomAudioPlayer(
                                 modifier = Modifier
                                     .size(72.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFF4FC3F7))
+                                    .background(textColor)
                                     .clickable { isPlaying = !isPlaying },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = Color.Black, modifier = Modifier.size(36.dp))
+                                Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = bgColor, modifier = Modifier.size(36.dp))
                             }
                             IconButton(onClick = { 
                                 if (currentIndex < audioMessages.size - 1) currentIndex++ 
@@ -322,7 +322,7 @@ fun CustomAudioPlayer(
                             }
                             IconButton(onClick = { loopMode = (loopMode + 1) % 3 }) {
                                 val icon = if (loopMode == 2) Icons.Default.RepeatOne else Icons.Default.Repeat
-                                val tint = if (loopMode > 0) Color(0xFF4FC3F7) else textColor
+                                val tint = if (loopMode > 0) textColor else dimTextColor
                                 Icon(icon, contentDescription = "Repeat", tint = tint)
                             }
                         }

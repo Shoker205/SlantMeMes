@@ -144,6 +144,16 @@ fun ChatListScreen(
     }
 
     LaunchedEffect(Unit) {
+        val cachedProfile = com.example.AppPreferences.getProfileCache()
+        if (cachedProfile != null) {
+            try {
+                val jo = org.json.JSONObject(cachedProfile)
+                profileName = jo.optString("name", "Name")
+                profileUsername = jo.optString("username", "@username")
+                profileAvatarUrl = jo.optString("avatarUrl", "")
+            } catch (e: Exception) {}
+        }
+        
         try {
             val user = FirebaseAuth.getInstance().currentUser
             if (user != null) {
@@ -157,6 +167,12 @@ fun ChatListScreen(
                 val un = snapshot.child("username").getValue(String::class.java) ?: ""
                 profileUsername = if (un.isNotBlank()) "@$un" else user.email ?: "@username"
                 profileAvatarUrl = snapshot.child("avatarUrl").getValue(String::class.java) ?: ""
+                
+                val jo = org.json.JSONObject()
+                jo.put("name", profileName)
+                jo.put("username", profileUsername)
+                jo.put("avatarUrl", profileAvatarUrl)
+                com.example.AppPreferences.saveProfileCache(jo.toString())
             }
         } catch (e: Exception) {
             // keep defaults
@@ -165,9 +181,32 @@ fun ChatListScreen(
 
     // Load real chats
     var chats by remember { mutableStateOf<List<ChatItem>>(emptyList()) }
+    var loadedFromCache by remember { mutableStateOf(false) }
 
     LaunchedEffect(currentUser) {
         if (currentUser != null) {
+            val cachedChats = com.example.AppPreferences.getChatsCache()
+            if (cachedChats != null && chats.isEmpty() && !loadedFromCache) {
+                try {
+                    val ja = org.json.JSONArray(cachedChats)
+                    val list = mutableListOf<ChatItem>()
+                    for (i in 0 until ja.length()) {
+                        val jo = ja.getJSONObject(i)
+                        list.add(ChatItem(
+                            jo.optString("id"),
+                            jo.optString("name"),
+                            jo.optString("lastMessage"),
+                            jo.optBoolean("isOnline"),
+                            jo.optLong("timestamp"),
+                            jo.optString("avatarUrl"),
+                            jo.optInt("unreadCount")
+                        ))
+                    }
+                    chats = list
+                    loadedFromCache = true
+                } catch (e: Exception) {}
+            }
+            
             val userChatsRef = database.getReference("user_chats").child(currentUser.uid)
             userChatsRef.addValueEventListener(object : com.google.firebase.database.ValueEventListener {
                 override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
@@ -198,6 +237,22 @@ fun ChatListScreen(
                         }
                         chatsList.sortByDescending { it.timestamp }
                         chats = chatsList
+                        
+                        try {
+                            val ja = org.json.JSONArray()
+                            for (c in chatsList) {
+                                val jo = org.json.JSONObject()
+                                jo.put("id", c.id)
+                                jo.put("name", c.name)
+                                jo.put("lastMessage", c.lastMessage)
+                                jo.put("isOnline", c.isOnline)
+                                jo.put("timestamp", c.timestamp)
+                                jo.put("avatarUrl", c.avatarUrl)
+                                jo.put("unreadCount", c.unreadCount)
+                                ja.put(jo)
+                            }
+                            com.example.AppPreferences.saveChatsCache(ja.toString())
+                        } catch (e: Exception) {}
                     }
                 }
                 override fun onCancelled(error: com.google.firebase.database.DatabaseError) {}
@@ -404,7 +459,7 @@ fun ChatListScreen(
                                                         modifier = Modifier
                                                             .size(8.dp)
                                                             .clip(CircleShape)
-                                                            .background(Color(0xFF4FC3F7))
+                                                            .background(textColor)
                                                     )
                                                 }
                                             }
@@ -526,7 +581,7 @@ fun ChatListScreen(
                                                         Text(user.name, color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                                                         if (user.isOnline) {
                                                             Spacer(modifier = Modifier.width(6.dp))
-                                                            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF4FC3F7)))
+                                                            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(textColor))
                                                         }
                                                     }
                                                     Text("@${user.username}", color = dimTextColor, fontSize = 12.sp)
@@ -611,7 +666,7 @@ fun ChatListScreen(
                                                         Text(contact.name, color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                                                         if (contact.isOnline) {
                                                             Spacer(modifier = Modifier.width(6.dp))
-                                                            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF4FC3F7)))
+                                                            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(textColor))
                                                         }
                                                     }
                                                     Text("@${contact.username}", color = dimTextColor, fontSize = 12.sp)

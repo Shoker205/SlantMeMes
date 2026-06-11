@@ -111,6 +111,20 @@ fun ProfileScreen(
     }
 
     LaunchedEffect(Unit) {
+        val cachedProfile = com.example.AppPreferences.getProfileCache()
+        if (cachedProfile != null) {
+            try {
+                val jo = org.json.JSONObject(cachedProfile)
+                name = jo.optString("name", "")
+                username = jo.optString("username", "")
+                bio = jo.optString("bio", "")
+                gender = jo.optString("gender", "")
+                birthday = jo.optString("birthday", "")
+                avatarUrl = jo.optString("avatarUrl", "")
+                if (name.isNotEmpty()) isLoading = false
+            } catch (e: Exception) {}
+        }
+        
         if (user != null) {
             try {
                 val snapshot = FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/")
@@ -125,6 +139,15 @@ fun ProfileScreen(
                 gender = snapshot.child("gender").getValue(String::class.java) ?: ""
                 birthday = snapshot.child("birthday").getValue(String::class.java) ?: ""
                 avatarUrl = snapshot.child("avatarUrl").getValue(String::class.java) ?: ""
+                
+                val jo = org.json.JSONObject()
+                jo.put("name", name)
+                jo.put("username", username)
+                jo.put("bio", bio)
+                jo.put("gender", gender)
+                jo.put("birthday", birthday)
+                jo.put("avatarUrl", avatarUrl)
+                com.example.AppPreferences.saveProfileCache(jo.toString())
             } catch (e: Exception) {
                 // Ignore initial load error
             }
@@ -148,11 +171,13 @@ fun ProfileScreen(
                     }
                 },
                 actions = {
+                    var isSaving by remember { mutableStateOf(false) }
                     if (isEditing) {
                         IconButton(onClick = {
+                            if (isSaving) return@IconButton
                             scope.launch {
                                 if (user != null) {
-                                    isLoading = true
+                                    isSaving = true
                                     try {
                                         val updates = mapOf(
                                             "name" to name.trim(),
@@ -167,20 +192,33 @@ fun ProfileScreen(
                                             .child(user.uid)
                                             .updateChildren(updates)
                                             .await()
+                                        val jo = org.json.JSONObject()
+                                        jo.put("name", name)
+                                        jo.put("username", username)
+                                        jo.put("bio", bio)
+                                        jo.put("gender", gender)
+                                        jo.put("birthday", birthday)
+                                        jo.put("avatarUrl", avatarUrl)
+                                        com.example.AppPreferences.saveProfileCache(jo.toString())
+                                        
                                         isEditing = false
                                         snackbarHostState.showSnackbar(s("Профиль сохранен", "Profile saved"))
                                     } catch(e: Exception) {
                                         snackbarHostState.showSnackbar(s("Ошибка сохранения: ", "Save error: ") + e.localizedMessage)
                                     }
-                                    isLoading = false
+                                    isSaving = false
                                 }
                             }
                         }) {
-                            Icon(Icons.Default.Save, contentDescription = s("Сохранить", "Save"), tint = dimTextColor)
+                            if (isSaving) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = textColor, strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Default.Save, contentDescription = s("Сохранить", "Save"), tint = textColor)
+                            }
                         }
                     } else {
                         IconButton(onClick = { isEditing = true }) {
-                            Icon(Icons.Default.Edit, contentDescription = s("Редактировать", "Edit"), tint = dimTextColor)
+                            Icon(Icons.Default.Edit, contentDescription = s("Редактировать", "Edit"), tint = textColor)
                         }
                     }
                 },

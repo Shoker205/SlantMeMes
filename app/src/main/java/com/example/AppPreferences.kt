@@ -9,6 +9,8 @@ object AppPreferences {
     private const val PREFS_NAME = "app_prefs"
     private const val KEY_IS_DARK_THEME = "is_dark_theme"
     private const val KEY_LANGUAGE = "app_language" // "Русский" or "English"
+    private const val KEY_CHATS_CACHE = "chats_cache"
+    private const val KEY_PROFILE_CACHE = "profile_cache"
 
     private lateinit var prefs: SharedPreferences
 
@@ -32,5 +34,21 @@ object AppPreferences {
     fun setLanguage(lang: String) {
         _language.value = lang
         prefs.edit().putString(KEY_LANGUAGE, lang).apply()
+    }
+    
+    fun saveChatsCache(json: String) {
+        prefs.edit().putString(KEY_CHATS_CACHE, json).apply()
+    }
+    
+    fun getChatsCache(): String? {
+        return prefs.getString(KEY_CHATS_CACHE, null)
+    }
+    
+    fun saveProfileCache(json: String) {
+        prefs.edit().putString(KEY_PROFILE_CACHE, json).apply()
+    }
+    
+    fun getProfileCache(): String? {
+        return prefs.getString(KEY_PROFILE_CACHE, null)
     }
 }
