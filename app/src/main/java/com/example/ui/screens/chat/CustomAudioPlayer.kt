@@ -43,7 +43,14 @@ fun CustomAudioPlayer(
     var currentPosition by remember { mutableIntStateOf(0) }
     var loopMode by remember { mutableIntStateOf(0) } // 0=none, 1=all, 2=one
     var shuffle by remember { mutableStateOf(false) }
+    var isExpanded by remember { mutableStateOf(false) }
     val ctx = androidx.compose.ui.platform.LocalContext.current
+
+    val isDarkTheme by com.example.AppPreferences.isDarkTheme.collectAsState(initial = true)
+    val bgColor = if (isDarkTheme) Color(0xFF121212) else Color(0xFFF5F5F5)
+    val surfaceColor = if (isDarkTheme) Color(0xFF2C2C2C) else Color.White
+    val textColor = if (isDarkTheme) Color.White else Color.Black
+    val dimTextColor = if (isDarkTheme) Color(0xFFAAAAAA) else Color(0xFF666666)
 
     val mediaPlayer = remember { MediaPlayer() }
     
@@ -124,117 +131,201 @@ fun CustomAudioPlayer(
         onDismissRequest = onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Box(modifier = Modifier.fillMaxSize().background(Color(0xFF1E1E1E))) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Top Bar
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 24.dp, start = 8.dp, end = 8.dp).height(56.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close", tint = Color.White)
-                    }
-                    Spacer(Modifier.weight(1f))
-                    IconButton(onClick = { 
-                        if (currentMsg != null) MediaTools.downloadMedia(ctx, currentMsg.mediaUrl, "audio")
-                    }) {
-                        Icon(Icons.Default.Download, contentDescription = "Download", tint = Color.White)
-                    }
-                }
-
-                Spacer(Modifier.height(32.dp))
-
-                // Album Art
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            // Click outside to dismiss
+            Box(modifier = Modifier.fillMaxSize().clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null
+            ) { onDismiss() })
+            
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(if (isExpanded) 1f else 0.33f)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .background(bgColor)
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null
+                    ) { } // prevent clicks passing through
+            ) {
+                // Drag handle / Expand toggle
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 32.dp)
-                        .aspectRatio(1f)
-                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(24.dp))
-                        .background(Color.DarkGray),
+                        .clickable { isExpanded = !isExpanded }
+                        .padding(16.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (songCover != null) {
-                        androidx.compose.foundation.Image(
-                            bitmap = songCover!!.asImageBitmap(),
-                            contentDescription = "Cover",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                        )
-                    } else {
-                        Icon(Icons.Default.Audiotrack, contentDescription = null, tint = Color.LightGray, modifier = Modifier.size(120.dp))
-                    }
+                    Box(modifier = Modifier.width(40.dp).height(4.dp).clip(CircleShape).background(dimTextColor.copy(alpha = 0.5f)))
                 }
 
-                Spacer(Modifier.height(48.dp))
-
-                // Title and Author
-                Column(modifier = Modifier.padding(horizontal = 32.dp)) {
-                    Text(songTitle, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                    Text(songArtist, color = Color.Gray, fontSize = 16.sp, modifier = Modifier.padding(top = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                }
-
-                Spacer(Modifier.height(32.dp))
-
-                // Seek bar
-                Slider(
-                    value = if(progress.isNaN()) 0f else progress,
-                    onValueChange = { 
-                        progress = it
-                        mediaPlayer.seekTo((it * duration).toInt())
-                    },
-                    modifier = Modifier.padding(horizontal = 24.dp),
-                    colors = SliderDefaults.colors(
-                        thumbColor = Color(0xFF4FC3F7),
-                        activeTrackColor = Color(0xFF4FC3F7),
-                        inactiveTrackColor = Color.DarkGray
-                    )
-                )
-
-                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    val mm = currentPosition / 1000 / 60
-                    val ss = (currentPosition / 1000) % 60
-                    val dm = duration / 1000 / 60
-                    val ds = (duration / 1000) % 60
-                    Text(String.format(java.util.Locale.US, "%02d:%02d", mm, ss), color = Color.Gray, fontSize = 12.sp)
-                    Text(String.format(java.util.Locale.US, "%02d:%02d", dm, ds), color = Color.Gray, fontSize = 12.sp)
-                }
-
-                Spacer(Modifier.weight(1f))
-
-                // Controls
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 48.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = { shuffle = !shuffle }) {
-                        Icon(Icons.Default.Shuffle, contentDescription = "Shuffle", tint = if (shuffle) Color(0xFF4FC3F7) else Color.White)
-                    }
-                    IconButton(onClick = { 
-                        if (currentIndex > 0) currentIndex-- 
-                    }) {
-                        Icon(Icons.Default.SkipPrevious, contentDescription = "Prev", tint = Color.White, modifier = Modifier.size(36.dp))
-                    }
-                    Box(
+                if (!isExpanded) {
+                    // COMPACT LAYOUT
+                    Row(
                         modifier = Modifier
-                            .size(72.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF4FC3F7))
-                            .clickable { isPlaying = !isPlaying },
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .clickable { isExpanded = true }
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = Color.Black, modifier = Modifier.size(36.dp))
+                        // cover
+                        Box(
+                            modifier = Modifier.size(56.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).background(surfaceColor),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (songCover != null) {
+                                androidx.compose.foundation.Image(
+                                    bitmap = songCover!!.asImageBitmap(),
+                                    contentDescription = "Cover",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                )
+                            } else {
+                                Icon(Icons.Default.Audiotrack, contentDescription = null, tint = dimTextColor)
+                            }
+                        }
+
+                        Spacer(Modifier.width(12.dp))
+
+                        // title & progress
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(songTitle, color = textColor, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            Text(songArtist, color = dimTextColor, fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+
+                            Spacer(Modifier.height(8.dp))
+                            androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxWidth().height(3.dp).clip(CircleShape).background(dimTextColor.copy(alpha=0.3f))) {
+                                val prog = if(progress.isNaN()) 0f else progress
+                                drawRect(color = Color(0xFF4FC3F7), size = androidx.compose.ui.geometry.Size(size.width * prog, size.height))
+                            }
+                        }
+
+                        Spacer(Modifier.width(12.dp))
+                        
+                        // Play/Pause button
+                        Box(
+                            modifier = Modifier.size(48.dp).clip(CircleShape).background(Color(0xFF4FC3F7)).clickable { isPlaying = !isPlaying },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = Color.Black)
+                        }
                     }
-                    IconButton(onClick = { 
-                        if (currentIndex < audioMessages.size - 1) currentIndex++ 
-                    }) {
-                        Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = Color.White, modifier = Modifier.size(36.dp))
-                    }
-                    IconButton(onClick = { loopMode = (loopMode + 1) % 3 }) {
-                        val icon = if (loopMode == 2) Icons.Default.RepeatOne else Icons.Default.Repeat
-                        val tint = if (loopMode > 0) Color(0xFF4FC3F7) else Color.White
-                        Icon(icon, contentDescription = "Repeat", tint = tint)
+                    Spacer(Modifier.weight(1f))
+                } else {
+                    // FULLSCREEN LAYOUT
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        // Top Bar
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp, start = 8.dp, end = 8.dp).height(48.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = { isExpanded = false }) { // Minimize instead of dismiss entirely
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Minimize", tint = textColor)
+                            }
+                            Spacer(Modifier.weight(1f))
+                            IconButton(onClick = { 
+                                if (currentMsg != null) MediaTools.downloadMedia(ctx, currentMsg.mediaUrl, "audio")
+                            }) {
+                                Icon(Icons.Default.Download, contentDescription = "Download", tint = textColor)
+                            }
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        // Album Art
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 32.dp)
+                                .aspectRatio(1f)
+                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(24.dp))
+                                .background(surfaceColor),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (songCover != null) {
+                                androidx.compose.foundation.Image(
+                                    bitmap = songCover!!.asImageBitmap(),
+                                    contentDescription = "Cover",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                )
+                            } else {
+                                Icon(Icons.Default.Audiotrack, contentDescription = null, tint = dimTextColor, modifier = Modifier.size(120.dp))
+                            }
+                        }
+
+                        Spacer(Modifier.height(32.dp))
+
+                        // Title and Author
+                        Column(modifier = Modifier.padding(horizontal = 32.dp)) {
+                            Text(songTitle, color = textColor, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            Text(songArtist, color = dimTextColor, fontSize = 16.sp, modifier = Modifier.padding(top = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        }
+
+                        Spacer(Modifier.weight(1f))
+
+                        // Seek bar
+                        Slider(
+                            value = if(progress.isNaN()) 0f else progress,
+                            onValueChange = { 
+                                progress = it
+                                mediaPlayer.seekTo((it * duration).toInt())
+                            },
+                            modifier = Modifier.padding(horizontal = 24.dp),
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color(0xFF4FC3F7),
+                                activeTrackColor = Color(0xFF4FC3F7),
+                                inactiveTrackColor = surfaceColor
+                            )
+                        )
+
+                        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            val mm = currentPosition / 1000 / 60
+                            val ss = (currentPosition / 1000) % 60
+                            val dm = duration / 1000 / 60
+                            val ds = (duration / 1000) % 60
+                            Text(String.format(java.util.Locale.US, "%02d:%02d", mm, ss), color = dimTextColor, fontSize = 12.sp)
+                            Text(String.format(java.util.Locale.US, "%02d:%02d", dm, ds), color = dimTextColor, fontSize = 12.sp)
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        // Controls
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 48.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = { shuffle = !shuffle }) {
+                                Icon(Icons.Default.Shuffle, contentDescription = "Shuffle", tint = if (shuffle) Color(0xFF4FC3F7) else textColor)
+                            }
+                            IconButton(onClick = { 
+                                if (currentIndex > 0) currentIndex-- 
+                            }) {
+                                Icon(Icons.Default.SkipPrevious, contentDescription = "Prev", tint = textColor, modifier = Modifier.size(36.dp))
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(72.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF4FC3F7))
+                                    .clickable { isPlaying = !isPlaying },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = Color.Black, modifier = Modifier.size(36.dp))
+                            }
+                            IconButton(onClick = { 
+                                if (currentIndex < audioMessages.size - 1) currentIndex++ 
+                            }) {
+                                Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = textColor, modifier = Modifier.size(36.dp))
+                            }
+                            IconButton(onClick = { loopMode = (loopMode + 1) % 3 }) {
+                                val icon = if (loopMode == 2) Icons.Default.RepeatOne else Icons.Default.Repeat
+                                val tint = if (loopMode > 0) Color(0xFF4FC3F7) else textColor
+                                Icon(icon, contentDescription = "Repeat", tint = tint)
+                            }
+                        }
                     }
                 }
             }
