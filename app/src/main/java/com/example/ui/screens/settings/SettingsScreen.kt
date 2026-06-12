@@ -178,14 +178,14 @@ fun SettingsScreen(onBack: () -> Unit) {
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = s("Версия: 1.0.0", "Version: 1.0.0"),
+                        text = s("Версия: 1.6.0", "Version: 1.6.0"),
                         fontSize = 14.sp,
                         color = dimTextColor
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Row(
                         modifier = Modifier.clickable {
-                            uriHandler.openUri("https://t.me/slant_tech")
+                            uriHandler.openUri("https://blog.sl-me.online")
                         },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -195,7 +195,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             color = dimTextColor
                         )
                         Text(
-                            text = "SlantTech",
+                            text = "SlantTech (blog.sl-me.online)",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = textColor

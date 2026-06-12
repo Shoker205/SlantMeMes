@@ -55,6 +55,26 @@ class VoiceRecorder(private val context: Context) {
         }
     }
 
+    fun pauseRecording() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                recorder?.pause()
+            }
+        } catch (e: Exception) {
+            Log.e("VoiceRecorder", "Pause recording failed", e)
+        }
+    }
+
+    fun resumeRecording() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                recorder?.resume()
+            }
+        } catch (e: Exception) {
+            Log.e("VoiceRecorder", "Resume recording failed", e)
+        }
+    }
+
     fun cancelRecording() {
         try {
             recorder?.apply {

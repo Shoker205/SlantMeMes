@@ -442,7 +442,7 @@ fun ChatListScreen(
                                             if (chat.avatarUrl.isNotBlank()) {
                                                 com.example.ui.components.AvatarImage(
                                                     avatarUrl = chat.avatarUrl,
-                                                    contentDescription = "Аватар",
+                                                    contentDescription = s("Аватар", "Avatar"),
                                                     modifier = Modifier.fillMaxSize()
                                                 )
                                             } else {
@@ -568,7 +568,7 @@ fun ChatListScreen(
                                                     if (user.avatarUrl.isNotBlank()) {
                                                         com.example.ui.components.AvatarImage(
                                                             avatarUrl = user.avatarUrl,
-                                                            contentDescription = "Аватар",
+                                                            contentDescription = s("Аватар", "Avatar"),
                                                             modifier = Modifier.fillMaxSize()
                                                         )
                                                     } else {
@@ -653,7 +653,7 @@ fun ChatListScreen(
                                                     if (contact.avatarUrl.isNotBlank()) {
                                                         com.example.ui.components.AvatarImage(
                                                             avatarUrl = contact.avatarUrl,
-                                                            contentDescription = "Аватар",
+                                                            contentDescription = s("Аватар", "Avatar"),
                                                             modifier = Modifier.fillMaxSize()
                                                         )
                                                     } else {

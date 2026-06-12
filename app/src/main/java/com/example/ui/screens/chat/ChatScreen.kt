@@ -133,6 +133,8 @@ fun ChatScreen(
     onProfileClick: () -> Unit = {}
 ) {
     var messages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
+    val selectedLanguage by com.example.AppPreferences.language.collectAsState()
+    val s: (String, String) -> String = { ru, en -> if (selectedLanguage == "English") en else ru }
     var inputText by remember { mutableStateOf("") }
     var selectedMessages by remember { mutableStateOf(setOf<String>()) }
     var contextMenuMessage by remember { mutableStateOf<ChatMessage?>(null) }
@@ -301,7 +303,7 @@ fun ChatScreen(
             pendingAttachments = pendingAttachments + toAdd
         }
         if (uris.size > 10) {
-            android.widget.Toast.makeText(ctx, "Выбрано больше 10 файлов", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(ctx, s("Выбрано больше 10 файлов", "More than 10 files selected"), android.widget.Toast.LENGTH_SHORT).show()
         }
     }
     
@@ -546,7 +548,7 @@ fun ChatScreen(
                                         Box(modifier = Modifier.width(3.dp).height(24.dp).background(if(isMine) bubbleSentContentColor else textColor, RoundedCornerShape(1.dp)))
                                         Spacer(Modifier.width(6.dp))
                                         Column {
-                                            Text(if (replyMsg.senderId == currentUser.uid) "Вы" else recipientName, color = if(isMine) bubbleSentContentColor else textColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            Text(if (replyMsg.senderId == currentUser.uid) s("Вы", "You") else recipientName, color = if(isMine) bubbleSentContentColor else textColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                             Text(replyMsg.text, color = if (isMine) bubbleSentContentColor else textColor, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                                         }
                                     }
@@ -584,8 +586,22 @@ fun ChatScreen(
                                                         if (isMedia) {
                                                             val resolvedUrl = com.example.utils.WebRtcDataChannel.getLocalFileUri(ctx, attachment.url)
                                                             if (resolvedUrl.startsWith("webrtc://")) {
-                                                                Box(modifier = Modifier.fillMaxSize().background(Color.DarkGray), contentAlignment = Alignment.Center) {
-                                                                    Icon(Icons.Default.Lock, contentDescription = "Encrypted", tint = Color.White, modifier = Modifier.size(24.dp))
+                                                                var isDownloading by remember { mutableStateOf(false) }
+                                                                Box(modifier = Modifier.fillMaxSize().background(Color.DarkGray).clickable {
+                                                                    val parts = attachment.url.replace("webrtc://", "").split("/")
+                                                                    if (parts.size >= 2) {
+                                                                        isDownloading = true
+                                                                        android.widget.Toast.makeText(ctx, s("Загрузка файла по P2P сети...", "Downloading file over P2P..."), android.widget.Toast.LENGTH_SHORT).show()
+                                                                        com.example.utils.WebRtcDataChannel.downloadWebRtcFile(ctx, parts[0], parts[1]) {
+                                                                            isDownloading = false
+                                                                        }
+                                                                    }
+                                                                }, contentAlignment = Alignment.Center) {
+                                                                    if (isDownloading) {
+                                                                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                                                                    } else {
+                                                                        Icon(Icons.Default.Lock, contentDescription = "Encrypted", tint = Color.White, modifier = Modifier.size(24.dp))
+                                                                    }
                                                                 }
                                                             } else {
                                                                 coil.compose.AsyncImage(
@@ -604,7 +620,7 @@ fun ChatScreen(
                                                             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(8.dp)) {
                                                                 Icon(if (attachment.type.startsWith("audio")) Icons.Default.Audiotrack else androidx.compose.material.icons.Icons.AutoMirrored.Filled.InsertDriveFile, null, tint = if(isMine) bubbleSentContentColor else textColor, modifier = Modifier.size(32.dp))
                                                                 Spacer(Modifier.height(4.dp))
-                                                                Text(attachment.filename.takeIf { it.isNotBlank() } ?: "Файл", color = if(isMine) bubbleSentContentColor else textColor, fontSize = 10.sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                                                                Text(attachment.filename.takeIf { it.isNotBlank() } ?: s("Файл", "File"), color = if(isMine) bubbleSentContentColor else textColor, fontSize = 10.sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                                                             }
                                                         }
                                                     }
@@ -637,9 +653,23 @@ fun ChatScreen(
                                             }) {
                                                 val resolvedUrl = com.example.utils.WebRtcDataChannel.getLocalFileUri(ctx, msg.mediaUrl)
                                                 if (resolvedUrl.startsWith("webrtc://")) {
-                                                    Box(modifier = Modifier.fillMaxSize().background(Color.DarkGray), contentAlignment = Alignment.Center) {
-                                                        Icon(Icons.Default.Lock, contentDescription = "Encrypted", tint = Color.White, modifier = Modifier.size(32.dp))
-                                                        Text("Секретное фото", color = Color.White, fontSize = 12.sp, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp))
+                                                    var isDownloading by remember { mutableStateOf(false) }
+                                                    Box(modifier = Modifier.fillMaxSize().background(Color.DarkGray).clickable {
+                                                        val parts = msg.mediaUrl.replace("webrtc://", "").split("/")
+                                                        if (parts.size >= 2) {
+                                                            isDownloading = true
+                                                            android.widget.Toast.makeText(ctx, s("Загрузка файла по P2P сети...", "Downloading file over P2P..."), android.widget.Toast.LENGTH_SHORT).show()
+                                                            com.example.utils.WebRtcDataChannel.downloadWebRtcFile(ctx, parts[0], parts[1]) {
+                                                                isDownloading = false
+                                                            }
+                                                        }
+                                                    }, contentAlignment = Alignment.Center) {
+                                                        if (isDownloading) {
+                                                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                                                        } else {
+                                                            Icon(Icons.Default.Download, contentDescription = "Download", tint = Color.White, modifier = Modifier.size(32.dp))
+                                                            Text(s("Скачать", "Download"), color = Color.White, fontSize = 12.sp, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp))
+                                                        }
                                                     }
                                                 } else {
                                                     coil.compose.AsyncImage(
@@ -704,9 +734,9 @@ fun ChatScreen(
                                                 }
                                                 Text(with(MediaTools) { dispText.ellipsizeMiddle(25) }, color = if (isMine) bubbleSentContentColor else textColor, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                                                 if (!isAudio) {
-                                                    Text("Нажмите для скачивания", color = if (isMine) bubbleSentContentColor.copy(alpha=0.7f) else dimTextColor, fontSize = 11.sp)
+                                                    Text(s("Нажмите для скачивания", "Tap to download"), color = if (isMine) bubbleSentContentColor.copy(alpha=0.7f) else dimTextColor, fontSize = 11.sp)
                                                 } else {
-                                                    Text("Нажмите для прослушивания", color = if (isMine) bubbleSentContentColor.copy(alpha=0.7f) else dimTextColor, fontSize = 11.sp)
+                                                    Text(s("Нажмите для прослушивания", "Tap to listen"), color = if (isMine) bubbleSentContentColor.copy(alpha=0.7f) else dimTextColor, fontSize = 11.sp)
                                                 }
                                             }
                                             Spacer(Modifier.width(8.dp))
@@ -811,7 +841,7 @@ fun ChatScreen(
                         }
                     }
                     androidx.compose.animation.AnimatedVisibility(visible = isUploading) {
-                        Text("Загрузка медиа...", color = textColor, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                        Text(s("Загрузка медиа...", "Loading media..."), color = textColor, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                     }
                     androidx.compose.animation.AnimatedVisibility(visible = replyToMessage != null) {
                         if (replyToMessage != null) {
@@ -822,7 +852,7 @@ fun ChatScreen(
                                 Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null, tint = dimTextColor, modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("В ответ на", color = textColor, fontSize = 12.sp)
+                                    Text(s("В ответ на", "In reply to"), color = textColor, fontSize = 12.sp)
                                     Text(replyToMessage!!.text, color = textColor, fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                                 }
                                 IconButton(onClick = { replyToMessage = null }, modifier = Modifier.size(24.dp)) {
@@ -840,7 +870,7 @@ fun ChatScreen(
                                 Icon(Icons.Default.Edit, contentDescription = null, tint = dimTextColor, modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("Редактирование", color = textColor, fontSize = 12.sp)
+                                    Text(s("Редактирование", "Editing"), color = textColor, fontSize = 12.sp)
                                     Text(messageToEdit!!.text, color = textColor, fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                                 }
                                 IconButton(onClick = { messageToEdit = null; inputText = "" }, modifier = Modifier.size(24.dp)) {
@@ -866,12 +896,12 @@ fun ChatScreen(
                                 containerColor = surfaceColor
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("Изображение", color = textColor) },
+                                    text = { Text(s("Изображение", "Image"), color = textColor) },
                                     leadingIcon = { Icon(Icons.Default.Image, contentDescription = null, tint = dimTextColor) },
                                     onClick = { showAttachmentMenu = false; pendingAttachmentType = "image"; launcher.launch("image/*") }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Видео", color = textColor) },
+                                    text = { Text(s("Видео", "Video"), color = textColor) },
                                     leadingIcon = { Icon(Icons.Default.Videocam, contentDescription = null, tint = dimTextColor) },
                                     onClick = { showAttachmentMenu = false; pendingAttachmentType = "video"; launcher.launch("video/*") }
                                 )
@@ -881,7 +911,7 @@ fun ChatScreen(
                                     onClick = { showAttachmentMenu = false; pendingAttachmentType = "audio"; launcher.launch("audio/*") }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Файл", color = textColor) },
+                                    text = { Text(s("Обзор", "Browse"), color = textColor) },
                                     leadingIcon = { Icon(Icons.AutoMirrored.Filled.InsertDriveFile, contentDescription = null, tint = dimTextColor) },
                                     onClick = { showAttachmentMenu = false; pendingAttachmentType = "file"; launcher.launch("*/*") }
                                 )
@@ -895,19 +925,27 @@ fun ChatScreen(
                         val audioPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
                             audioPermissionGranted = isGranted
                             if (!isGranted) {
-                                android.widget.Toast.makeText(ctx, "Разрешение на микрофон необходимо", android.widget.Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(ctx, s("Разрешение на микрофон необходимо", "Microphone permission is required"), android.widget.Toast.LENGTH_SHORT).show()
                             }
                         }
                         var isRecording by remember { mutableStateOf(false) }
                         var isRecordingLocked by remember { mutableStateOf(false) }
+                        var isRecordingPaused by remember { mutableStateOf(false) }
+                        var isRecordingStoppedForPreview by remember { mutableStateOf(false) }
+                        var isPreviewPlaying by remember { mutableStateOf(false) }
+                        val previewMediaPlayer = remember { android.media.MediaPlayer() }
+                        DisposableEffect(Unit) {
+                            onDispose { previewMediaPlayer.release() }
+                        }
+                        
                         var recordSlideOffset by remember { mutableFloatStateOf(0f) }
                         var recordSlideYOffset by remember { mutableFloatStateOf(0f) }
                         var recordingSeconds by remember { mutableIntStateOf(0) }
                         var hasVibratedForLock by remember { mutableStateOf(false) }
                         
-                        LaunchedEffect(isRecording) {
-                            if (isRecording) {
-                                recordingSeconds = 0
+                        LaunchedEffect(isRecording) { if (isRecording) recordingSeconds = 0 }
+                        LaunchedEffect(isRecording, isRecordingPaused, isRecordingStoppedForPreview) {
+                            if (isRecording && !isRecordingPaused && !isRecordingStoppedForPreview) {
                                 while (isActive) {
                                     kotlinx.coroutines.delay(1000)
                                     recordingSeconds++
@@ -925,10 +963,58 @@ fun ChatScreen(
                                 if (isRecordingLocked) {
                                     IconButton(onClick = {
                                         recorder.cancelRecording()
+                                        if (isPreviewPlaying) { previewMediaPlayer.stop(); isPreviewPlaying = false }
                                         isRecording = false
                                         isRecordingLocked = false
+                                        isRecordingPaused = false
+                                        isRecordingStoppedForPreview = false
                                     }) {
                                         Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.Red, modifier = Modifier.size(24.dp))
+                                    }
+                                    
+                                    if (isRecordingStoppedForPreview) {
+                                        IconButton(onClick = {
+                                            if (isPreviewPlaying) {
+                                                previewMediaPlayer.pause()
+                                                isPreviewPlaying = false
+                                            } else {
+                                                val file = recorder.currentOutputFile
+                                                if (file != null && file.exists()) {
+                                                    previewMediaPlayer.reset()
+                                                    previewMediaPlayer.setDataSource(file.absolutePath)
+                                                    previewMediaPlayer.prepare()
+                                                    previewMediaPlayer.start()
+                                                    isPreviewPlaying = true
+                                                    previewMediaPlayer.setOnCompletionListener {
+                                                        isPreviewPlaying = false
+                                                    }
+                                                }
+                                            }
+                                        }) {
+                                            Icon(if (isPreviewPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play Preview", tint = textColor, modifier = Modifier.size(24.dp))
+                                        }
+                                    } else {
+                                        IconButton(onClick = {
+                                            if (isRecordingPaused) {
+                                                recorder.resumeRecording()
+                                                isRecordingPaused = false
+                                            } else {
+                                                recorder.pauseRecording()
+                                                isRecordingPaused = true
+                                            }
+                                        }) {
+                                            Icon(if (isRecordingPaused) Icons.Default.Mic else Icons.Default.Pause, contentDescription = "Pause/Resume", tint = textColor, modifier = Modifier.size(24.dp))
+                                        }
+                                        
+                                        if (isRecordingPaused) {
+                                            IconButton(onClick = {
+                                                recorder.stopRecording()
+                                                isRecordingStoppedForPreview = true
+                                                isRecordingPaused = false
+                                            }) {
+                                                Icon(Icons.Default.PlayArrow, contentDescription = "Preview", tint = textColor, modifier = Modifier.size(24.dp))
+                                            }
+                                        }
                                     }
                                 } else {
                                     Spacer(Modifier.width(8.dp))
@@ -941,13 +1027,12 @@ fun ChatScreen(
                                 Text(String.format(java.util.Locale.US, "%d:%02d", min, sec), color = textColor, fontSize = 14.sp)
                                 
                                 val amplitudes = remember { androidx.compose.runtime.mutableStateListOf<Float>() }
-                                LaunchedEffect(isRecording) {
-                                    if (isRecording) {
-                                        amplitudes.clear()
+                                LaunchedEffect(isRecording) { if (!isRecording) amplitudes.clear() }
+                                LaunchedEffect(isRecording, isRecordingPaused, isRecordingStoppedForPreview) {
+                                    if (isRecording && !isRecordingPaused && !isRecordingStoppedForPreview) {
                                         while (isActive) {
                                             kotlinx.coroutines.delay(50)
                                             val amp = recorder.getMaxAmplitude()
-                                            // Max amplitude is normally up to 32767
                                             val scaled = (amp / 10000f).coerceIn(0.1f, 1f)
                                             amplitudes.add(scaled)
                                             if (amplitudes.size > 40) amplitudes.removeAt(0)
@@ -976,14 +1061,17 @@ fun ChatScreen(
     
                                 if (!isRecordingLocked) {
                                     val cancelAlpha = (1f - (-recordSlideOffset / 150f)).coerceIn(0f, 1f)
-                                    Text("< Отмените", color = dimTextColor.copy(alpha = cancelAlpha), fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.offset { androidx.compose.ui.unit.IntOffset(recordSlideOffset.toInt(), 0) })
+                                    Text(s("< Отмените", "< Cancel"), color = dimTextColor.copy(alpha = cancelAlpha), fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.offset { androidx.compose.ui.unit.IntOffset(recordSlideOffset.toInt(), 0) })
                                     Spacer(Modifier.width(8.dp))
                                 } else {
                                     IconButton(onClick = {
-                                        val file = recorder.stopRecording()
+                                        val file = if (isRecordingStoppedForPreview) recorder.currentOutputFile else recorder.stopRecording()
                                         if (file != null) uploadAndSendMessage("", android.net.Uri.fromFile(file))
+                                        if (isPreviewPlaying) { previewMediaPlayer.stop(); isPreviewPlaying = false }
                                         isRecording = false
                                         isRecordingLocked = false
+                                        isRecordingPaused = false
+                                        isRecordingStoppedForPreview = false
                                     }) {
                                         Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = textColor)
                                     }
@@ -1358,7 +1446,7 @@ fun ChatScreen(
             CustomAudioPlayer(
                 audioMessages = audioMsgs,
                 initialIndex = if (idx >= 0 && idx < audioMsgs.size) idx else 0,
-                getSenderName = { if (it == currentUser.uid) "Вы" else recipientName },
+                getSenderName = { if (it == currentUser.uid) s("Вы", "You") else recipientName },
                 onDismiss = { showAudioPlayer = false }
             )
         }
@@ -1590,6 +1678,7 @@ class VoicePlaybackManager {
                 isPlaying.value = false
                 progress.value = 1f
                 stopProgress()
+                this.stop() // Auto close upon completion
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -1670,10 +1759,12 @@ object MediaTools {
             if (intent.resolveActivity(ctx.packageManager) != null) {
                 ctx.startActivity(intent)
             } else {
-                android.widget.Toast.makeText(ctx, "Нет приложения для открытия файла", android.widget.Toast.LENGTH_SHORT).show()
+                val isEng = com.example.AppPreferences.language.value == "English"
+                android.widget.Toast.makeText(ctx, if (isEng) "No app available to open this file" else "Нет приложения для открытия файла", android.widget.Toast.LENGTH_SHORT).show()
             }
         } catch (e: Exception) {
-            android.widget.Toast.makeText(ctx, "Ошибка открытия файла", android.widget.Toast.LENGTH_SHORT).show()
+            val isEng = com.example.AppPreferences.language.value == "English"
+            android.widget.Toast.makeText(ctx, if (isEng) "Error opening file" else "Ошибка открытия файла", android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1695,13 +1786,16 @@ object MediaTools {
             if (parts.size >= 2) {
                 val chatId = parts[0]
                 val transferId = parts[1]
-                android.widget.Toast.makeText(ctx, "Загрузка файла по P2P сети...", android.widget.Toast.LENGTH_SHORT).show()
+                val isEng = com.example.AppPreferences.language.value == "English"
+                android.widget.Toast.makeText(ctx, if (isEng) "Downloading file over P2P..." else "Загрузка файла по P2P сети...", android.widget.Toast.LENGTH_SHORT).show()
                 com.example.utils.WebRtcDataChannel.downloadWebRtcFile(ctx, chatId, transferId) { file ->
                     if (file != null) {
-                        android.widget.Toast.makeText(ctx, "Файл загружен", android.widget.Toast.LENGTH_SHORT).show()
+                        val isEngCb = com.example.AppPreferences.language.value == "English"
+                        android.widget.Toast.makeText(ctx, if (isEngCb) "File downloaded" else "Файл загружен", android.widget.Toast.LENGTH_SHORT).show()
                         openFile(ctx, file, type)
                     } else {
-                        android.widget.Toast.makeText(ctx, "Ошибка скачивания по P2P", android.widget.Toast.LENGTH_SHORT).show()
+                        val isEngCb = com.example.AppPreferences.language.value == "English"
+                        android.widget.Toast.makeText(ctx, if (isEngCb) "P2P download error" else "Ошибка скачивания по P2P", android.widget.Toast.LENGTH_SHORT).show()
                     }
                 }
                 return
@@ -1722,9 +1816,11 @@ object MediaTools {
             request.setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, filename)
             val manager = ctx.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
             manager.enqueue(request)
-            android.widget.Toast.makeText(ctx, "Скачивание начато", android.widget.Toast.LENGTH_SHORT).show()
+            val isEng = com.example.AppPreferences.language.value == "English"
+            android.widget.Toast.makeText(ctx, if (isEng) "Download started" else "Скачивание начато", android.widget.Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
-            android.widget.Toast.makeText(ctx, "Ошибка скачивания", android.widget.Toast.LENGTH_SHORT).show()
+            val isEng = com.example.AppPreferences.language.value == "English"
+            android.widget.Toast.makeText(ctx, if (isEng) "Download error" else "Ошибка скачивания", android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 }

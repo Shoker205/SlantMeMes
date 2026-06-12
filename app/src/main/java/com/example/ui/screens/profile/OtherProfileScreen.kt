@@ -62,7 +62,7 @@ fun OtherProfileScreen(
             try {
                 // Load User Profile details
                 val snapshot = database.getReference("users").child(userId).get().await()
-                name = snapshot.child("name").getValue(String::class.java) ?: "Пользователь"
+                name = snapshot.child("name").getValue(String::class.java) ?: s("Пользователь", "User")
                 username = snapshot.child("username").getValue(String::class.java) ?: ""
                 bio = snapshot.child("bio").getValue(String::class.java) ?: ""
                 gender = snapshot.child("gender").getValue(String::class.java) ?: ""

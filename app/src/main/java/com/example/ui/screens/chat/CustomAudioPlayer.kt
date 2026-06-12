@@ -145,14 +145,15 @@ fun CustomAudioPlayer(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .then(if (isExpanded) Modifier.fillMaxHeight(0.95f) else Modifier.wrapContentHeight())
+                    .wrapContentHeight()
                     .clip(androidx.compose.foundation.shape.RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
                     .background(bgColor)
+                    .animateContentSize()
                     .clickable(
                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null
                     ) { } // prevent clicks passing through
             ) {
-                // Drag handle / Expand toggle
+                // Drag handle
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -169,80 +170,92 @@ fun CustomAudioPlayer(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { isExpanded = true }
-                            .padding(horizontal = 20.dp, vertical = 8.dp)
+                            .padding(horizontal = 16.dp)
                             .padding(bottom = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // cover
-                        Box(
-                            modifier = Modifier.size(56.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)).background(surfaceColor),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (songCover != null) {
-                                androidx.compose.foundation.Image(
-                                    bitmap = songCover!!.asImageBitmap(),
-                                    contentDescription = "Cover",
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                                )
-                            } else {
-                                Icon(Icons.Default.Audiotrack, contentDescription = null, tint = dimTextColor)
-                            }
-                        }
-
-                        Spacer(Modifier.width(16.dp))
-
-                        // title & progress
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(songTitle, color = textColor, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                            Text(songArtist, color = dimTextColor, fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-
-                            Spacer(Modifier.height(8.dp))
-                            androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape).background(dimTextColor.copy(alpha=0.2f))) {
-                                val prog = if(progress.isNaN()) 0f else progress
-                                drawRect(color = textColor, size = androidx.compose.ui.geometry.Size(size.width * prog, size.height))
-                            }
-                        }
-
-                        Spacer(Modifier.width(16.dp))
-                        
                         // Play/Pause button
                         Box(
-                            modifier = Modifier.size(52.dp).clip(CircleShape).background(textColor).clickable { isPlaying = !isPlaying },
+                            modifier = Modifier.size(40.dp).clip(CircleShape).background(textColor).clickable { isPlaying = !isPlaying },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = bgColor, modifier = Modifier.size(28.dp))
+                            Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = bgColor, modifier = Modifier.size(24.dp))
+                        }
+
+                        Spacer(Modifier.width(8.dp))
+
+                        // Waveform/Info
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(songTitle, color = textColor, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxWidth().height(20.dp)) {
+                                val seed = (songTitle + songArtist).hashCode()
+                                val random = java.util.Random(seed.toLong())
+                                val barWidth = 3.dp.toPx()
+                                val space = 2.dp.toPx()
+                                val bars = (size.width / (barWidth + space)).toInt()
+                                val prog = if(progress.isNaN()) 0f else progress
+                                val passedBars = (bars * prog).toInt()
+                                
+                                for (i in 0 until bars) {
+                                    val x = i * (barWidth + space)
+                                    val amp = 0.2f + random.nextFloat() * 0.8f
+                                    val h = size.height * amp
+                                    val y = (size.height - h) / 2
+                                    val color = if (i < passedBars) textColor else dimTextColor.copy(alpha = 0.3f)
+                                    drawRoundRect(
+                                        color = color,
+                                        topLeft = androidx.compose.ui.geometry.Offset(x, y),
+                                        size = androidx.compose.ui.geometry.Size(barWidth, h),
+                                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(barWidth/2, barWidth/2)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.width(8.dp))
+                        
+                        Row {
+                            IconButton(onClick = { if (currentIndex > 0) currentIndex-- }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Default.SkipPrevious, contentDescription = "Prev", tint = textColor)
+                            }
+                            IconButton(onClick = { if (currentIndex < audioMessages.size - 1) currentIndex++ }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = textColor)
+                            }
                         }
                     }
                 } else {
-                    // FULLSCREEN LAYOUT
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        // Top Bar
+                    // EXPANDED HALF-SCREEN LAYOUT
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight(0.6f)
+                            .padding(bottom = 16.dp)
+                    ) {
+                        // Top Bar Actions
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp).height(56.dp),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            IconButton(onClick = { isExpanded = false }) { // Minimize instead of dismiss entirely
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Minimize", tint = textColor, modifier = Modifier.size(32.dp).rotate(-90f))
+                            IconButton(onClick = { isExpanded = false }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Minimize", tint = textColor, modifier = Modifier.size(28.dp).rotate(-90f))
                             }
                             Spacer(Modifier.weight(1f))
                             IconButton(onClick = { 
                                 if (currentMsg != null) MediaTools.downloadMedia(ctx, currentMsg.mediaUrl, "audio")
                             }) {
-                                Icon(Icons.Default.Download, contentDescription = "Download", tint = textColor)
+                                Icon(Icons.Default.Download, contentDescription = "Download", tint = textColor, modifier = Modifier.size(24.dp))
                             }
                         }
-
-                        Spacer(Modifier.weight(0.5f))
 
                         // Album Art
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 48.dp)
+                                .weight(1f)
+                                .padding(horizontal = 48.dp, vertical = 8.dp)
                                 .aspectRatio(1f)
-                                .heightIn(max = 340.dp)
-                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(32.dp))
+                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(24.dp))
                                 .background(surfaceColor),
                             contentAlignment = Alignment.Center
                         ) {
@@ -254,81 +267,80 @@ fun CustomAudioPlayer(
                                     contentScale = androidx.compose.ui.layout.ContentScale.Crop
                                 )
                             } else {
-                                Icon(Icons.Default.Audiotrack, contentDescription = null, tint = dimTextColor, modifier = Modifier.size(120.dp))
+                                Icon(Icons.Default.Audiotrack, contentDescription = null, tint = dimTextColor, modifier = Modifier.size(100.dp))
                             }
                         }
 
-                        Spacer(Modifier.weight(0.5f))
-
                         // Title and Author
-                        Column(modifier = Modifier.padding(horizontal = 32.dp)) {
-                            Text(songTitle, color = textColor, fontSize = 28.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                            Text(songArtist, color = dimTextColor, fontSize = 18.sp, modifier = Modifier.padding(top = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(songTitle, color = textColor, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            Text(songArtist, color = dimTextColor, fontSize = 16.sp, modifier = Modifier.padding(top = 4.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                         }
-
-                        Spacer(Modifier.weight(0.5f))
 
                         // Seek bar
-                        Slider(
-                            value = if(progress.isNaN()) 0f else progress,
-                            onValueChange = { 
-                                progress = it
-                                mediaPlayer.seekTo((it * duration).toInt())
-                            },
-                            modifier = Modifier.padding(horizontal = 20.dp),
-                            colors = SliderDefaults.colors(
-                                thumbColor = textColor,
-                                activeTrackColor = textColor,
-                                inactiveTrackColor = surfaceColor,
-                                activeTickColor = Color.Transparent,
-                                inactiveTickColor = Color.Transparent
+                        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                            Slider(
+                                value = if(progress.isNaN()) 0f else progress,
+                                onValueChange = { 
+                                    progress = it
+                                    mediaPlayer.seekTo((it * duration).toInt())
+                                },
+                                modifier = Modifier.padding(horizontal = 24.dp).height(32.dp),
+                                colors = SliderDefaults.colors(
+                                    thumbColor = textColor,
+                                    activeTrackColor = textColor,
+                                    inactiveTrackColor = surfaceColor,
+                                    activeTickColor = Color.Transparent,
+                                    inactiveTickColor = Color.Transparent
+                                )
                             )
-                        )
 
-                        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp).offset(y = (-8).dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                            val mm = currentPosition / 1000 / 60
-                            val ss = (currentPosition / 1000) % 60
-                            val dm = duration / 1000 / 60
-                            val ds = (duration / 1000) % 60
-                            Text(String.format(java.util.Locale.US, "%02d:%02d", mm, ss), color = dimTextColor, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                            Text(String.format(java.util.Locale.US, "%02d:%02d", dm, ds), color = dimTextColor, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                                val mm = currentPosition / 1000 / 60
+                                val ss = (currentPosition / 1000) % 60
+                                val dm = duration / 1000 / 60
+                                val ds = (duration / 1000) % 60
+                                Text(String.format(java.util.Locale.US, "%02d:%02d", mm, ss), color = dimTextColor, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                Text(String.format(java.util.Locale.US, "%02d:%02d", dm, ds), color = dimTextColor, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            }
                         }
-
-                        Spacer(Modifier.weight(0.5f))
 
                         // Controls
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 32.dp),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
                             horizontalArrangement = Arrangement.SpaceEvenly,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(onClick = { shuffle = !shuffle }) {
-                                Icon(Icons.Default.Shuffle, contentDescription = "Shuffle", tint = if (shuffle) textColor else dimTextColor, modifier = Modifier.size(28.dp))
+                                Icon(Icons.Default.Shuffle, contentDescription = "Shuffle", tint = if (shuffle) textColor else dimTextColor, modifier = Modifier.size(24.dp))
                             }
                             IconButton(onClick = { 
                                 if (currentIndex > 0) currentIndex-- 
                             }) {
-                                Icon(Icons.Default.SkipPrevious, contentDescription = "Prev", tint = textColor, modifier = Modifier.size(42.dp))
+                                Icon(Icons.Default.SkipPrevious, contentDescription = "Prev", tint = textColor, modifier = Modifier.size(36.dp))
                             }
                             Box(
                                 modifier = Modifier
-                                    .size(80.dp)
+                                    .size(64.dp)
                                     .clip(CircleShape)
                                     .background(textColor)
                                     .clickable { isPlaying = !isPlaying },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = bgColor, modifier = Modifier.size(40.dp))
+                                Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = bgColor, modifier = Modifier.size(32.dp))
                             }
                             IconButton(onClick = { 
                                 if (currentIndex < audioMessages.size - 1) currentIndex++ 
                             }) {
-                                Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = textColor, modifier = Modifier.size(42.dp))
+                                Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = textColor, modifier = Modifier.size(36.dp))
                             }
                             IconButton(onClick = { loopMode = (loopMode + 1) % 3 }) {
                                 val icon = if (loopMode == 2) Icons.Default.RepeatOne else Icons.Default.Repeat
                                 val tint = if (loopMode > 0) textColor else dimTextColor
-                                Icon(icon, contentDescription = "Repeat", tint = tint, modifier = Modifier.size(28.dp))
+                                Icon(icon, contentDescription = "Repeat", tint = tint, modifier = Modifier.size(24.dp))
                             }
                         }
                     }

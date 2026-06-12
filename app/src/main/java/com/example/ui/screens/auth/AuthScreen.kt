@@ -304,7 +304,7 @@ fun AuthScreen(
                                         } catch (e: Exception) {
                                             val msg = e.localizedMessage ?: s("Ошибка регистрации", "Registration error")
                                             if (msg.contains("Permission denied", ignoreCase = true)) {
-                                                showToast("Измените правила БД на: .write: auth != null")
+                                                showToast(s("Измените правила БД на: .write: auth != null", "Change DB rules to: .write: auth != null"))
                                             } else {
                                                 showToast(msg)
                                             }
@@ -354,13 +354,13 @@ fun AuthScreen(
                                                     currentMascotState = MascotState.Idle
                                                 }
                                             } else {
-                                                showToast("Ошибка сессии")
+                                                showToast(s("Ошибка сессии", "Session error"))
                                                 currentMascotState = MascotState.Idle
                                             }
                                         } catch (e: Exception) {
-                                            val msg = e.localizedMessage ?: "Ошибка"
+                                            val msg = e.localizedMessage ?: s("Ошибка", "Error")
                                             if (msg.contains("Permission denied", ignoreCase = true)) {
-                                                showToast("Измените правила БД (read: auth != null)")
+                                                showToast(s("Измените правила БД (read: auth != null)", "Change DB rules (read: auth != null)"))
                                             } else {
                                                 showToast(msg)
                                             }
@@ -496,9 +496,9 @@ fun AuthScreen(
                                                 currentMascotState = MascotState.Idle
                                             }
                                         } catch (e: Exception) {
-                                            val msg = e.localizedMessage ?: "Ошибка"
+                                            val msg = e.localizedMessage ?: s("Ошибка", "Error")
                                             if (msg.contains("Permission denied", ignoreCase = true)) {
-                                                showToast("Измените правила БД на: .write: auth != null")
+                                                showToast(s("Измените правила БД на: .write: auth != null", "Change DB rules to: .write: auth != null"))
                                             } else {
                                                 showToast(msg)
                                             }
@@ -529,7 +529,7 @@ fun AuthScreen(
                                             currentMode = AuthMode.LOGIN
                                             currentMascotState = MascotState.Idle
                                         } catch (e: Exception) {
-                                            showToast(e.localizedMessage ?: "Ошибка")
+                                            showToast(e.localizedMessage ?: s("Ошибка", "Error"))
                                             currentMascotState = MascotState.Idle
                                         }
                                     }
