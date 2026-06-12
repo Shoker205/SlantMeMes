@@ -85,7 +85,7 @@ object WebRtcDataChannel {
                 val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@launch
                 
                 // Cache locally for the sender to view
-                val cachedFile = File(context.cacheDir, filename)
+                val cachedFile = File(context.cacheDir, "${transferId}_$filename")
                 cachedFile.writeBytes(bytes)
                 
                 val cipher = Cipher.getInstance("AES/ECB/PKCS5Padding")
@@ -139,6 +139,13 @@ object WebRtcDataChannel {
     fun downloadWebRtcFile(context: Context, chatId: String, transferId: String, onComplete: (File?) -> Unit) {
         scope.launch {
             try {
+                // Check cache first
+                val existingFile = context.cacheDir.listFiles()?.firstOrNull { it.name.contains(transferId) }
+                if (existingFile != null && existingFile.exists()) {
+                    withContext(Dispatchers.Main) { onComplete(existingFile) }
+                    return@launch
+                }
+
                 val ref = transfersRef.child(chatId).child(transferId)
                 val snapshot = ref.child("metadata").getSuspend()
                 if (!snapshot.exists() || snapshot.child("ready").getValue(Boolean::class.java) != true) {
@@ -163,7 +170,7 @@ object WebRtcDataChannel {
                 cipher.init(Cipher.DECRYPT_MODE, getAESKey(chatId))
                 val decryptedBytes = cipher.doFinal(encryptedBytes)
                 
-                val file = File(context.cacheDir, filename)
+                val file = File(context.cacheDir, "${transferId}_$filename")
                 file.writeBytes(decryptedBytes)
                 
                 withContext(Dispatchers.Main) {

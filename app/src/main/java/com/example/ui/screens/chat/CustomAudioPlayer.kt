@@ -23,7 +23,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -143,8 +145,8 @@ fun CustomAudioPlayer(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .fillMaxHeight(if (isExpanded) 1f else 0.33f)
-                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .then(if (isExpanded) Modifier.fillMaxHeight(0.95f) else Modifier.wrapContentHeight())
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
                     .background(bgColor)
                     .clickable(
                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null
@@ -158,7 +160,7 @@ fun CustomAudioPlayer(
                         .padding(16.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Box(modifier = Modifier.width(40.dp).height(4.dp).clip(CircleShape).background(dimTextColor.copy(alpha = 0.5f)))
+                    Box(modifier = Modifier.width(48.dp).height(5.dp).clip(CircleShape).background(dimTextColor.copy(alpha = 0.3f)))
                 }
 
                 if (!isExpanded) {
@@ -167,12 +169,13 @@ fun CustomAudioPlayer(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { isExpanded = true }
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                            .padding(horizontal = 20.dp, vertical = 8.dp)
+                            .padding(bottom = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // cover
                         Box(
-                            modifier = Modifier.size(56.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).background(surfaceColor),
+                            modifier = Modifier.size(56.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)).background(surfaceColor),
                             contentAlignment = Alignment.Center
                         ) {
                             if (songCover != null) {
@@ -187,7 +190,7 @@ fun CustomAudioPlayer(
                             }
                         }
 
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(Modifier.width(16.dp))
 
                         // title & progress
                         Column(modifier = Modifier.weight(1f)) {
@@ -195,33 +198,32 @@ fun CustomAudioPlayer(
                             Text(songArtist, color = dimTextColor, fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
 
                             Spacer(Modifier.height(8.dp))
-                            androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxWidth().height(3.dp).clip(CircleShape).background(dimTextColor.copy(alpha=0.3f))) {
+                            androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape).background(dimTextColor.copy(alpha=0.2f))) {
                                 val prog = if(progress.isNaN()) 0f else progress
                                 drawRect(color = textColor, size = androidx.compose.ui.geometry.Size(size.width * prog, size.height))
                             }
                         }
 
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(Modifier.width(16.dp))
                         
                         // Play/Pause button
                         Box(
-                            modifier = Modifier.size(48.dp).clip(CircleShape).background(textColor).clickable { isPlaying = !isPlaying },
+                            modifier = Modifier.size(52.dp).clip(CircleShape).background(textColor).clickable { isPlaying = !isPlaying },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = bgColor)
+                            Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = bgColor, modifier = Modifier.size(28.dp))
                         }
                     }
-                    Spacer(Modifier.weight(1f))
                 } else {
                     // FULLSCREEN LAYOUT
                     Column(modifier = Modifier.fillMaxSize()) {
                         // Top Bar
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp, start = 8.dp, end = 8.dp).height(48.dp),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp).height(56.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(onClick = { isExpanded = false }) { // Minimize instead of dismiss entirely
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Minimize", tint = textColor)
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Minimize", tint = textColor, modifier = Modifier.size(32.dp).rotate(-90f))
                             }
                             Spacer(Modifier.weight(1f))
                             IconButton(onClick = { 
@@ -231,15 +233,16 @@ fun CustomAudioPlayer(
                             }
                         }
 
-                        Spacer(Modifier.height(16.dp))
+                        Spacer(Modifier.weight(0.5f))
 
                         // Album Art
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 32.dp)
+                                .padding(horizontal = 48.dp)
                                 .aspectRatio(1f)
-                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(24.dp))
+                                .heightIn(max = 340.dp)
+                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(32.dp))
                                 .background(surfaceColor),
                             contentAlignment = Alignment.Center
                         ) {
@@ -255,15 +258,15 @@ fun CustomAudioPlayer(
                             }
                         }
 
-                        Spacer(Modifier.height(32.dp))
+                        Spacer(Modifier.weight(0.5f))
 
                         // Title and Author
                         Column(modifier = Modifier.padding(horizontal = 32.dp)) {
-                            Text(songTitle, color = textColor, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                            Text(songArtist, color = dimTextColor, fontSize = 16.sp, modifier = Modifier.padding(top = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            Text(songTitle, color = textColor, fontSize = 28.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            Text(songArtist, color = dimTextColor, fontSize = 18.sp, modifier = Modifier.padding(top = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                         }
 
-                        Spacer(Modifier.weight(1f))
+                        Spacer(Modifier.weight(0.5f))
 
                         // Seek bar
                         Slider(
@@ -272,58 +275,60 @@ fun CustomAudioPlayer(
                                 progress = it
                                 mediaPlayer.seekTo((it * duration).toInt())
                             },
-                            modifier = Modifier.padding(horizontal = 24.dp),
+                            modifier = Modifier.padding(horizontal = 20.dp),
                             colors = SliderDefaults.colors(
                                 thumbColor = textColor,
                                 activeTrackColor = textColor,
-                                inactiveTrackColor = surfaceColor
+                                inactiveTrackColor = surfaceColor,
+                                activeTickColor = Color.Transparent,
+                                inactiveTickColor = Color.Transparent
                             )
                         )
 
-                        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp).offset(y = (-8).dp), horizontalArrangement = Arrangement.SpaceBetween) {
                             val mm = currentPosition / 1000 / 60
                             val ss = (currentPosition / 1000) % 60
                             val dm = duration / 1000 / 60
                             val ds = (duration / 1000) % 60
-                            Text(String.format(java.util.Locale.US, "%02d:%02d", mm, ss), color = dimTextColor, fontSize = 12.sp)
-                            Text(String.format(java.util.Locale.US, "%02d:%02d", dm, ds), color = dimTextColor, fontSize = 12.sp)
+                            Text(String.format(java.util.Locale.US, "%02d:%02d", mm, ss), color = dimTextColor, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            Text(String.format(java.util.Locale.US, "%02d:%02d", dm, ds), color = dimTextColor, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                         }
 
-                        Spacer(Modifier.height(16.dp))
+                        Spacer(Modifier.weight(0.5f))
 
                         // Controls
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 48.dp),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 32.dp),
                             horizontalArrangement = Arrangement.SpaceEvenly,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(onClick = { shuffle = !shuffle }) {
-                                Icon(Icons.Default.Shuffle, contentDescription = "Shuffle", tint = if (shuffle) textColor else dimTextColor)
+                                Icon(Icons.Default.Shuffle, contentDescription = "Shuffle", tint = if (shuffle) textColor else dimTextColor, modifier = Modifier.size(28.dp))
                             }
                             IconButton(onClick = { 
                                 if (currentIndex > 0) currentIndex-- 
                             }) {
-                                Icon(Icons.Default.SkipPrevious, contentDescription = "Prev", tint = textColor, modifier = Modifier.size(36.dp))
+                                Icon(Icons.Default.SkipPrevious, contentDescription = "Prev", tint = textColor, modifier = Modifier.size(42.dp))
                             }
                             Box(
                                 modifier = Modifier
-                                    .size(72.dp)
+                                    .size(80.dp)
                                     .clip(CircleShape)
                                     .background(textColor)
                                     .clickable { isPlaying = !isPlaying },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = bgColor, modifier = Modifier.size(36.dp))
+                                Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = bgColor, modifier = Modifier.size(40.dp))
                             }
                             IconButton(onClick = { 
                                 if (currentIndex < audioMessages.size - 1) currentIndex++ 
                             }) {
-                                Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = textColor, modifier = Modifier.size(36.dp))
+                                Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = textColor, modifier = Modifier.size(42.dp))
                             }
                             IconButton(onClick = { loopMode = (loopMode + 1) % 3 }) {
                                 val icon = if (loopMode == 2) Icons.Default.RepeatOne else Icons.Default.Repeat
                                 val tint = if (loopMode > 0) textColor else dimTextColor
-                                Icon(icon, contentDescription = "Repeat", tint = tint)
+                                Icon(icon, contentDescription = "Repeat", tint = tint, modifier = Modifier.size(28.dp))
                             }
                         }
                     }

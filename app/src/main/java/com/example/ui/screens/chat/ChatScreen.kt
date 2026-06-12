@@ -438,11 +438,17 @@ fun ChatScreen(
                     var swipeOffset by remember { mutableFloatStateOf(0f) }
                     
                     val ctx = androidx.compose.ui.platform.LocalContext.current
-                    LaunchedEffect(msg.mediaUrl) {
-                        if (msg.mediaUrl.startsWith("webrtc://") && !isMine) {
-                            val parts = msg.mediaUrl.replace("webrtc://", "").split("/")
-                            if (parts.size >= 2) {
-                                com.example.utils.WebRtcDataChannel.downloadWebRtcFile(ctx, parts[0], parts[1]) { }
+                    LaunchedEffect(msg.mediaUrl, msg.attachments.size) {
+                        val urls = mutableSetOf<String>()
+                        if (msg.mediaUrl.startsWith("webrtc://")) urls.add(msg.mediaUrl)
+                        msg.attachments.forEach { if (it.url.startsWith("webrtc://")) urls.add(it.url) }
+                        
+                        urls.forEach { url ->
+                            if (!isMine) {
+                                val parts = url.replace("webrtc://", "").split("/")
+                                if (parts.size >= 2) {
+                                    com.example.utils.WebRtcDataChannel.downloadWebRtcFile(ctx, parts[0], parts[1]) { }
+                                }
                             }
                         }
                     }
