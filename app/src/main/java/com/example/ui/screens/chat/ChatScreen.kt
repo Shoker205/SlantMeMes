@@ -247,7 +247,9 @@ fun ChatScreen(
                         eq("peer_id", recipientId)
                     }
                 }
-            } catch (e: Exception) {}
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
             delay(2000)
         }
     }
@@ -432,16 +434,38 @@ fun ChatScreen(
                                 Icon(Icons.Default.Delete, contentDescription = "Delete", tint = textColor)
                             }
                         } else {
-                            Row(modifier = Modifier.clickable { onBack() }.padding(end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(modifier = Modifier.clickable { onBack() }.padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = textColor, modifier = Modifier.size(24.dp))
                             }
-                            Column(modifier = Modifier.weight(1f).clickable { onProfileClick() }) {
-                                Text(recipientName, color = textColor, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, lineHeight = 20.sp)
-                                if (recipientOnline) {
-                                    Text(s("онлайн", "online"), color = dimTextColor, fontSize = 12.sp, lineHeight = 16.sp)
-                                } else if (recipientLastSeen > 0L) {
-                                    val dateStr = java.text.SimpleDateFormat("HH:mm, dd MMM", java.util.Locale.getDefault()).format(java.util.Date(recipientLastSeen))
-                                    Text(s("был(а) $dateStr", "last seen $dateStr"), color = dimTextColor, fontSize = 12.sp, lineHeight = 16.sp)
+                            Row(modifier = Modifier.weight(1f).clickable { onProfileClick() }, verticalAlignment = Alignment.CenterVertically) {
+                                Box(modifier = Modifier.size(40.dp)) {
+                                    com.example.ui.components.AvatarImage(
+                                        avatarUrl = recipientAvatar,
+                                        contentDescription = "Avatar",
+                                        modifier = Modifier.fillMaxSize().clip(CircleShape).background(Color.Gray)
+                                    )
+                                    if (recipientOnline) {
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.BottomEnd)
+                                                .size(12.dp)
+                                                .clip(CircleShape)
+                                                .background(Color.Green)
+                                                .border(2.dp, surfaceColor, CircleShape)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(recipientName, color = textColor, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, lineHeight = 20.sp)
+                                    if (recipientOnline) {
+                                        Text(s("онлайн", "online"), color = Color(0xFF4CAF50), fontSize = 12.sp, lineHeight = 16.sp)
+                                    } else if (recipientLastSeen > 0L) {
+                                        val dateStr = java.text.SimpleDateFormat("HH:mm, dd MMM", java.util.Locale.getDefault()).format(java.util.Date(recipientLastSeen))
+                                        Text(s("был(а) $dateStr", "last seen $dateStr"), color = dimTextColor, fontSize = 12.sp, lineHeight = 16.sp)
+                                    } else {
+                                        Text(s("офлайн", "offline"), color = dimTextColor, fontSize = 12.sp, lineHeight = 16.sp)
+                                    }
                                 }
                             }
                             IconButton(onClick = { onProfileClick() }) {
@@ -922,7 +946,7 @@ fun ChatScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(bgColor)
-                            .padding(16.dp),
+                            .padding(bottom = 8.dp, top = 8.dp, start = 12.dp, end = 12.dp),
                         verticalAlignment = Alignment.Bottom
                     ) {
                         Box(modifier = Modifier.padding(bottom = 2.dp)) {
@@ -1120,10 +1144,9 @@ fun ChatScreen(
                             Row(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .padding(horizontal = 12.dp)
-                                    .background(surfaceColor, RoundedCornerShape(20.dp))
-                                    .border(1.dp, borderColor, RoundedCornerShape(20.dp))
-                                    .padding(vertical = 8.dp, horizontal = 16.dp),
+                                    .padding(horizontal = 8.dp)
+                                    .background(surfaceColor, RoundedCornerShape(24.dp))
+                                    .padding(vertical = 12.dp, horizontal = 16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 BasicTextField(
