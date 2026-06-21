@@ -3,6 +3,8 @@ package com.example.ui.screens.settings
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Info
@@ -164,11 +166,17 @@ fun SettingsScreen(onBack: () -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.ic_launcher_foreground),
-                        contentDescription = "Иконка приложения",
-                        modifier = Modifier.size(72.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(72.dp)
+                            .background(Color.Black, RoundedCornerShape(16.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                            contentDescription = "Иконка приложения"
+                        )
+                    }
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         text = "Slant",
