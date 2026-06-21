@@ -25,6 +25,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -346,10 +347,36 @@ fun ChatListScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                        Icon(imageVector = Icons.Default.Menu, contentDescription = "Menu", tint = textColor)
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(surfaceColor, RoundedCornerShape(12.dp))
+                            .border(1.dp, borderColor, RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { scope.launch { drawerState.open() } }
+                    ) {
+                        if (profileAvatarUrl.isNotBlank()) {
+                            com.example.ui.components.AvatarImage(
+                                avatarUrl = profileAvatarUrl,
+                                contentDescription = "Menu",
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Icon(imageVector = Icons.Default.Person, contentDescription = "Menu", tint = dimTextColor, modifier = Modifier.size(24.dp).align(Alignment.Center))
+                        }
                     }
-                    Text("SLANT", color = textColor, fontWeight = FontWeight.Black, letterSpacing = 3.sp)
+                    Text(
+                        when (selectedDockTab) {
+                            0 -> "SLANT"
+                            1 -> s("ЧАТЫ", "PEOPLE")
+                            2 -> s("ГРУППЫ", "GROUPS")
+                            else -> "SLANT"
+                        },
+                        color = textColor, 
+                        fontWeight = FontWeight.Black, 
+                        letterSpacing = 3.sp,
+                        fontSize = 16.sp
+                    )
                     IconButton(onClick = { 
                         selectedDockTab = 1
                     }) {
@@ -469,16 +496,16 @@ fun ChatListScreen(
                                             Box(
                                                 modifier = Modifier
                                                     .padding(start = 8.dp)
-                                                    .size(24.dp)
-                                                    .clip(CircleShape)
-                                                    .background(textColor),
+                                                    .defaultMinSize(minWidth = 18.dp)
+                                                    .background(textColor, RoundedCornerShape(10.dp))
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp),
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 Text(
                                                     text = chat.unreadCount.toString(),
                                                     color = bgColor,
-                                                    fontSize = 12.sp,
-                                                    fontWeight = FontWeight.Bold
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Black
                                                 )
                                             }
                                         }
@@ -717,10 +744,9 @@ fun ChatListScreen(
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 16.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(if (isDarkTheme) Color(0xFF151515) else Color.White)
-                        .border(1.dp, borderColor.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                        .padding(bottom = 20.dp)
+                        .background(if (isDarkTheme) Color(0xFF0F0F0F) else Color(0xFFF0F0F0), RoundedCornerShape(24.dp))
+                        .border(1.dp, borderColor, RoundedCornerShape(24.dp))
                         .pointerInput(Unit) {
                             var dragDistance = 0f
                             detectHorizontalDragGestures(
@@ -733,13 +759,12 @@ fun ChatListScreen(
                                     }
                                 },
                                 onDragCancel = { dragDistance = 0f },
-                                onHorizontalDrag = { change: androidx.compose.ui.input.pointer.PointerInputChange, dragAmount: Float ->
-                                    
+                                onHorizontalDrag = { _, dragAmount ->
                                     dragDistance += dragAmount
                                 }
                             )
                         }
-                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     val activeIcons = listOf(
                         Icons.AutoMirrored.Filled.Chat,
@@ -752,20 +777,20 @@ fun ChatListScreen(
                     ) {
                         activeIcons.forEachIndexed { index, icon ->
                             val isSelected = selectedDockTab == index
+                            val scale by androidx.compose.animation.core.animateFloatAsState(targetValue = if (isSelected) 1.1f else 1f, label = "scale")
                             Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(16.dp))
+                                    .clip(RoundedCornerShape(12.dp))
                                     .clickable { selectedDockTab = index }
-                                    .background(if (isSelected) surfaceColor else Color.Transparent)
-                                    .border(if (isSelected) 1.dp else 0.dp, if (isSelected) borderColor else Color.Transparent, RoundedCornerShape(16.dp))
-                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    .padding(vertical = 10.dp, horizontal = 12.dp)
+                                    .scale(scale),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = icon,
                                     contentDescription = "Tab $index",
                                     tint = if (isSelected) textColor else dimTextColor,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }

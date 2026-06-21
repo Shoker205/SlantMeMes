@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -34,6 +35,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Mic
@@ -197,7 +199,7 @@ fun ChatScreen(
     
     val bubbleSentContentColor = bgColor
     val bubbleSentBgColor = textColor
-    val bubbleReceivedColor = if (isDarkTheme) Color(0xFF1E1E1E) else White
+    val bubbleReceivedColor = surfaceColor
 
     var showAttachmentMenu by remember { mutableStateOf(false) }
 
@@ -354,49 +356,21 @@ fun ChatScreen(
 
     Scaffold(
         topBar = {
-            Column {
-                TopAppBar(
-                    title = { 
-                        androidx.compose.animation.AnimatedContent(targetState = selectedMessages.isNotEmpty(), label = "") { hasSelection ->
-                            if (hasSelection) {
-                                Text(selectedMessages.size.toString(), color = textColor, fontSize = 18.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                            } else {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.clickable { onProfileClick() }
-                                ) {
-                                    Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(surfaceColor)) {
-                                        if (recipientAvatar.isNotBlank()) {
-                                            com.example.ui.components.AvatarImage(avatarUrl = recipientAvatar, contentDescription = null, modifier = Modifier.fillMaxSize())
-                                        }
-                                    }
-                                    Spacer(Modifier.width(12.dp))
-                                    Column(verticalArrangement = Arrangement.Center, modifier = Modifier.height(36.dp)) {
-                                        Text(recipientName, color = textColor, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, lineHeight = 20.sp)
-                                        if (recipientOnline) {
-                                            Text("онлайн", color = textColor, fontSize = 12.sp, lineHeight = 16.sp)
-                                        } else if (recipientLastSeen > 0L) {
-                                            val dateStr = java.text.SimpleDateFormat("HH:mm, dd MMM", java.util.Locale.getDefault()).format(java.util.Date(recipientLastSeen))
-                                            Text("был(а) $dateStr", color = dimTextColor, fontSize = 12.sp, lineHeight = 16.sp)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    navigationIcon = {
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(bgColor)
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                            .statusBarsPadding(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         if (selectedMessages.isNotEmpty()) {
                             IconButton(onClick = { selectedMessages = emptySet() }) {
                                 Icon(Icons.Default.Close, contentDescription = "Cancel", tint = textColor)
                             }
-                        } else {
-                            IconButton(onClick = onBack) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = textColor)
-                            }
-                        }
-                    },
-                    actions = {
-                        if (selectedMessages.isNotEmpty()) {
+                            Spacer(Modifier.width(16.dp))
+                            Text(selectedMessages.size.toString(), color = textColor, fontSize = 18.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = Modifier.weight(1f))
                             IconButton(onClick = { showForwardDialog = true }) {
                                 Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = "Forward", tint = textColor, modifier = Modifier.scale(scaleX = -1f, scaleY = 1f))
                             }
@@ -407,10 +381,25 @@ fun ChatScreen(
                             }) {
                                 Icon(Icons.Default.Delete, contentDescription = "Delete", tint = textColor)
                             }
+                        } else {
+                            Row(modifier = Modifier.clickable { onBack() }.padding(end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = textColor, modifier = Modifier.size(24.dp))
+                            }
+                            Column(modifier = Modifier.weight(1f).clickable { onProfileClick() }) {
+                                Text(recipientName, color = textColor, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, lineHeight = 20.sp)
+                                if (recipientOnline) {
+                                    Text(s("онлайн", "online"), color = dimTextColor, fontSize = 12.sp, lineHeight = 16.sp)
+                                } else if (recipientLastSeen > 0L) {
+                                    val dateStr = java.text.SimpleDateFormat("HH:mm, dd MMM", java.util.Locale.getDefault()).format(java.util.Date(recipientLastSeen))
+                                    Text(s("был(а) $dateStr", "last seen $dateStr"), color = dimTextColor, fontSize = 12.sp, lineHeight = 16.sp)
+                                }
+                            }
+                            IconButton(onClick = { onProfileClick() }) {
+                                Icon(Icons.Default.Info, contentDescription = "Info", tint = textColor)
+                            }
                         }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = surfaceColor)
-                )
+                    }
+                    androidx.compose.material3.HorizontalDivider(color = borderColor, thickness = 1.dp)
                 
                 if (currentlyPlayingVoice != null) {
                     SmallVoicePlayer(currentlyPlayingVoice!!, voicePlaybackViewModel)
@@ -882,8 +871,8 @@ fun ChatScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                            .background(bgColor, RoundedCornerShape(24.dp)),
+                            .background(bgColor)
+                            .padding(16.dp),
                         verticalAlignment = Alignment.Bottom
                     ) {
                         Box(modifier = Modifier.padding(bottom = 2.dp)) {
@@ -1081,7 +1070,10 @@ fun ChatScreen(
                             Row(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .padding(vertical = 8.dp, horizontal = 0.dp),
+                                    .padding(horizontal = 12.dp)
+                                    .background(surfaceColor, RoundedCornerShape(20.dp))
+                                    .border(1.dp, borderColor, RoundedCornerShape(20.dp))
+                                    .padding(vertical = 8.dp, horizontal = 16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 BasicTextField(
@@ -1089,10 +1081,10 @@ fun ChatScreen(
                                     onValueChange = { inputText = it },
                                     textStyle = androidx.compose.ui.text.TextStyle(color = textColor, fontSize = 16.sp),
                                     maxLines = 5,
-                                    modifier = Modifier.weight(1f).padding(start = 4.dp, end = 4.dp),
+                                    modifier = Modifier.weight(1f),
                                     decorationBox = { innerTextField ->
                                         if (inputText.isEmpty()) {
-                                            Text("Сообщение...", color = dimTextColor, fontSize = 16.sp)
+                                            Text(s("Сообщение...", "Message..."), color = dimTextColor, fontSize = 16.sp)
                                         }
                                         innerTextField()
                                     },
