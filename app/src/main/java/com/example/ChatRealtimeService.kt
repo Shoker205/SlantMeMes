@@ -19,12 +19,12 @@ class ChatRealtimeService : Service() {
     }
 
     private fun startForegroundService() {
-        val channelId = "chat_realtime_service_channel"
+        val channelId = "chat_realtime_service_channel_2" // Changed ID to apply new importance
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,
-                "Реалтайм Уведомления",
-                NotificationManager.IMPORTANCE_LOW
+                "Фоновая синхронизация",
+                NotificationManager.IMPORTANCE_MIN
             )
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
@@ -32,9 +32,9 @@ class ChatRealtimeService : Service() {
 
         val notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("Slant")
-            .setContentText("Проверка новых сообщений...")
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setContentText("Служба синхронизации активна")
+            .setSmallIcon(R.drawable.ic_notification_minimal)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
             .build()
 
         startForeground(1001, notification)
