@@ -41,6 +41,10 @@ import androidx.compose.runtime.LaunchedEffect
 data class ChatItem(val id: String, val name: String, val lastMessage: String, val isOnline: Boolean, val timestamp: Long = 0L, val avatarUrl: String = "", val unreadCount: Int = 0)
 data class UserProfile(val uid: String, val name: String, val username: String, val avatarUrl: String, val isOnline: Boolean = false)
 
+object ContactsCache {
+    var cachedContacts: List<UserProfile>? = null
+}
+
 @Composable
 fun ChatListScreen(
     onOpenDrawer: () -> Unit = {},
@@ -75,7 +79,7 @@ fun ChatListScreen(
     var searchResults by remember { mutableStateOf<List<UserProfile>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
 
-    var contactsList by remember { mutableStateOf<List<UserProfile>>(emptyList()) }
+    var contactsList by remember { mutableStateOf<List<UserProfile>>(ContactsCache.cachedContacts ?: emptyList()) }
     var isLoadingContacts by remember { mutableStateOf(false) }
 
     val currentUser = FirebaseAuth.getInstance().currentUser
@@ -84,6 +88,10 @@ fun ChatListScreen(
     // Load contacts implementation
     LaunchedEffect(selectedDockTab, searchQuery) {
         if (selectedDockTab == 1 && currentUser != null && searchQuery.isBlank()) {
+            if (ContactsCache.cachedContacts != null) {
+                contactsList = ContactsCache.cachedContacts!!
+                return@LaunchedEffect
+            }
             isLoadingContacts = true
             try {
                 val contactsSnap = database.getReference("users")
@@ -105,6 +113,7 @@ fun ChatListScreen(
                     }
                 }
                 contactsList = list
+                ContactsCache.cachedContacts = list
             } catch (e: Exception) {
                 // error
             }

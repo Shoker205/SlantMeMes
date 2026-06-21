@@ -190,9 +190,11 @@ fun OtherProfileScreen(
                                 if (isContact) {
                                     contactsRef.removeValue().await()
                                     isContact = false
+                                    com.example.ui.screens.chat.ContactsCache.cachedContacts = null
                                 } else {
                                     contactsRef.setValue(true).await()
                                     isContact = true
+                                    com.example.ui.screens.chat.ContactsCache.cachedContacts = null
                                 }
                             }
                         }

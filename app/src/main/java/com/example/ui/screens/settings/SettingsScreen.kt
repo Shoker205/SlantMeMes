@@ -195,7 +195,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             color = dimTextColor
                         )
                         Text(
-                            text = "SlantTech (blog.sl-me.online)",
+                            text = "SlantTech",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = textColor
