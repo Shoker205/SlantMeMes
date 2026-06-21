@@ -22,8 +22,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.*
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.FirebaseDatabase
+import com.example.models.UserProfileData
+import com.example.utils.SupabaseSetup
+import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.storage.storage
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -78,7 +81,7 @@ fun ProfileScreen(
     
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val user = FirebaseAuth.getInstance().currentUser
+    val user = SupabaseSetup.client.auth.currentUserOrNull()
     
     val selectedLanguage by com.example.AppPreferences.language.collectAsState()
     val s: (String, String) -> String = { ru, en -> if (selectedLanguage == "English") en else ru }
@@ -127,18 +130,18 @@ fun ProfileScreen(
         
         if (user != null) {
             try {
-                val snapshot = FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/")
-                    .getReference("users")
-                    .child(user.uid)
-                    .get()
-                    .await()
+                val snapshot = SupabaseSetup.client.postgrest["users"].select {
+                    filter { eq("uid", user.id) }
+                }.decodeSingleOrNull<UserProfileData>()
                 
-                name = snapshot.child("name").getValue(String::class.java) ?: ""
-                username = snapshot.child("username").getValue(String::class.java) ?: ""
-                bio = snapshot.child("bio").getValue(String::class.java) ?: ""
-                gender = snapshot.child("gender").getValue(String::class.java) ?: ""
-                birthday = snapshot.child("birthday").getValue(String::class.java) ?: ""
-                avatarUrl = snapshot.child("avatarUrl").getValue(String::class.java) ?: ""
+                if (snapshot != null) {
+                    name = snapshot.name
+                    username = snapshot.username
+                    bio = snapshot.bio
+                    gender = snapshot.gender
+                    birthday = snapshot.birthday
+                    avatarUrl = snapshot.avatarUrl
+                }
                 
                 val jo = org.json.JSONObject()
                 jo.put("name", name)
@@ -179,19 +182,18 @@ fun ProfileScreen(
                                 if (user != null) {
                                     isSaving = true
                                     try {
-                                        val updates = mapOf(
-                                            "name" to name.trim(),
-                                            "username" to username.trim().removePrefix("@"),
-                                            "bio" to bio.trim(),
-                                            "gender" to gender.trim(),
-                                            "birthday" to birthday.trim(),
-                                            "avatarUrl" to avatarUrl
+                                        val userData = UserProfileData(
+                                            uid = user.id,
+                                            name = name.trim(),
+                                            username = username.trim().removePrefix("@"),
+                                            bio = bio.trim(),
+                                            gender = gender.trim(),
+                                            birthday = birthday.trim(),
+                                            avatarUrl = avatarUrl
                                         )
-                                        FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/")
-                                            .getReference("users")
-                                            .child(user.uid)
-                                            .updateChildren(updates)
-                                            .await()
+                                        SupabaseSetup.client.postgrest["users"].update(userData) {
+                                            filter { eq("uid", user.id) }
+                                        }
                                         val jo = org.json.JSONObject()
                                         jo.put("name", name)
                                         jo.put("username", username)

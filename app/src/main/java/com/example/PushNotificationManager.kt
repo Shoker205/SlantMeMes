@@ -7,8 +7,15 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.*
+import com.example.models.UserProfileData
+import com.example.models.UserChatData
+import com.example.utils.SupabaseSetup
+import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.postgrest.postgrest
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 object PushNotificationManager {
     private const val CHANNEL_ID = "chat_messages_channel"
@@ -22,43 +29,52 @@ object PushNotificationManager {
 
         createNotificationChannel(context)
 
-        val currentUser = FirebaseAuth.getInstance().currentUser ?: return
-        val database = FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/")
-        val userChatsRef = database.getReference("user_chats").child(currentUser.uid)
+        val currentUser = SupabaseSetup.client.auth.currentUserOrNull() ?: return
 
-        userChatsRef.addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                for (child in snapshot.children) {
-                    val peerId = child.key ?: continue
-                    val timestamp = child.child("timestamp").getValue(Long::class.java) ?: 0L
-                    val lastMessage = child.child("lastMessage").getValue(String::class.java) ?: ""
-                    val lastSenderId = child.child("lastSenderId").getValue(String::class.java) ?: ""
-
-                    val previousTimestamp = lastObservedTimestamps[peerId]
-
-                    // If we already know about this chat and the timestamp is newer, it's a new message
-                    if (previousTimestamp != null && timestamp > previousTimestamp) {
-                        if (lastMessage.isNotBlank() && lastSenderId != currentUser.uid && peerId != currentOpenedChatId) {
-                            database.getReference("users").child(peerId).get().addOnSuccessListener { userSnap ->
-                                val name = userSnap.child("name").getValue(String::class.java) ?: "User"
-                                val avatarUrl = userSnap.child("avatarUrl").getValue(String::class.java) ?: ""
+        GlobalScope.launch {
+            while (isActive) {
+                try {
+                    val userChats = SupabaseSetup.client.postgrest["user_chats"].select {
+                        filter { eq("user_id", currentUser.id) }
+                    }.decodeList<UserChatData>()
+                    
+                    for (chat in userChats) {
+                        val peerId = chat.peer_id
+                        val timestamp = chat.timestamp
+                        val lastMessage = chat.last_message
+                        
+                        // We check timestamp vs last message
+                        val previousTimestamp = lastObservedTimestamps[peerId]
+                        
+                        if (previousTimestamp != null && timestamp > previousTimestamp) {
+                            if (lastMessage.isNotBlank() && peerId != currentOpenedChatId) {
+                                // Assume it's from them if updated and it's not opened
+                                val userSnap = SupabaseSetup.client.postgrest["users"].select {
+                                    filter { eq("uid", peerId) }
+                                }.decodeSingleOrNull<UserProfileData>()
                                 
-                                val chatId = if (currentUser.uid < peerId) currentUser.uid + "_" + peerId else peerId + "_" + currentUser.uid
-                                val decryptedTxt = if (!lastMessage.startsWith("[")) {
-                                    try { com.example.ui.screens.chat.ChatCrypto.decrypt(lastMessage, chatId) } catch (e: Exception) { lastMessage }
-                                } else lastMessage
-
-                                showNotification(context, peerId, name, decryptedTxt, avatarUrl)
+                                if (userSnap != null) {
+                                    val name = userSnap.name
+                                    val avatarUrl = userSnap.avatarUrl
+                                    
+                                    val chatId = if (currentUser.id < peerId) currentUser.id + "_" + peerId else peerId + "_" + currentUser.id
+                                    val decryptedTxt = if (!lastMessage.startsWith("[")) {
+                                        try { com.example.ui.screens.chat.ChatCrypto.decrypt(lastMessage, chatId) } catch (e: Exception) { lastMessage }
+                                    } else lastMessage
+                                    
+                                    showNotification(context, peerId, name, decryptedTxt, avatarUrl)
+                                }
                             }
                         }
+                        
+                        lastObservedTimestamps[peerId] = timestamp
                     }
-                    
-                    lastObservedTimestamps[peerId] = timestamp
+                } catch (e: Exception) {
+                    // Ignore errors during polling
                 }
+                delay(4000)
             }
-
-            override fun onCancelled(error: DatabaseError) {}
-        })
+        }
     }
 
     private fun createNotificationChannel(context: Context) {

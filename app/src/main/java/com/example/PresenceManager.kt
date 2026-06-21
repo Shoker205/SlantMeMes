@@ -3,9 +3,12 @@ package com.example
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ServerValue
+import com.example.models.UserProfileData
+import com.example.utils.SupabaseSetup
+import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.postgrest.postgrest
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 
 object PresenceManager {
     private var isAppInForeground = false
@@ -26,23 +29,6 @@ object PresenceManager {
     fun init() {
         handler.post(checkRunnable)
         markActive()
-        
-        val database = FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/")
-        val amIOnlineRef = database.getReference(".info/connected")
-        amIOnlineRef.addValueEventListener(object : com.google.firebase.database.ValueEventListener {
-            override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
-                val connected = snapshot.getValue(Boolean::class.java) ?: false
-                if (connected) {
-                    val userStatusRef = FirebaseAuth.getInstance().currentUser?.uid?.let { uid ->
-                        database.getReference("users").child(uid)
-                    }
-                    userStatusRef?.onDisconnect()?.updateChildren(
-                        mapOf("online" to false, "lastSeen" to ServerValue.TIMESTAMP)
-                    )
-                }
-            }
-            override fun onCancelled(error: com.google.firebase.database.DatabaseError) {}
-        })
     }
 
     fun markActive() {
@@ -79,18 +65,25 @@ object PresenceManager {
     }
 
     private fun setOnlineStatus(online: Boolean) {
-        val currentUser = FirebaseAuth.getInstance().currentUser ?: return
-        val database = FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/")
-        val userStatusRef = database.getReference("users").child(currentUser.uid)
-        
+        val currentUser = SupabaseSetup.client.auth.currentUserOrNull() ?: return
         isOnlineState = online
-        val map = if (online) {
-            mapOf("online" to true)
-        } else {
-            mapOf("online" to false, "lastSeen" to ServerValue.TIMESTAMP)
-        }
-        userStatusRef.updateChildren(map).addOnFailureListener {
-            Log.e("PresenceManager", "Failed to update online status", it)
+        
+        GlobalScope.launch {
+            try {
+                if (online) {
+                    val userData = mapOf("online" to true)
+                    SupabaseSetup.client.postgrest["users"].update(userData) {
+                        filter { eq("uid", currentUser.id) }
+                    }
+                } else {
+                    val userData = mapOf("online" to false, "lastTimestamp" to System.currentTimeMillis())
+                    SupabaseSetup.client.postgrest["users"].update(userData) {
+                        filter { eq("uid", currentUser.id) }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("PresenceManager", "Failed to update online status", e)
+            }
         }
     }
 }

@@ -6,7 +6,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.ui.screens.auth.AuthScreen
 import com.example.ui.screens.chat.ChatListScreen
-import com.google.firebase.auth.FirebaseAuth
+import com.example.utils.SupabaseSetup
+import io.github.jan.supabase.auth.auth
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.GlobalScope
 import com.example.ui.screens.profile.ProfileScreen
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
@@ -15,7 +18,7 @@ import android.app.Activity
 @Composable
 fun MainAppNavigation() {
     val navController = rememberNavController()
-    val authUser = FirebaseAuth.getInstance().currentUser
+    val authUser = SupabaseSetup.client.auth.currentUserOrNull()
     val startDest = if (authUser != null) "chat_list" else "auth"
 
     val context = LocalContext.current
@@ -29,7 +32,7 @@ fun MainAppNavigation() {
         }
     }
 
-    LaunchedEffect(authUser?.uid) {
+    LaunchedEffect(authUser?.id) {
         if (authUser != null) {
             PresenceManager.init()
         }
@@ -50,7 +53,11 @@ fun MainAppNavigation() {
                     navController.navigate("chat/$userId")
                 },
                 onLogout = {
-                    FirebaseAuth.getInstance().signOut()
+                    GlobalScope.launch {
+                        try {
+                            SupabaseSetup.client.auth.signOut()
+                        } catch (e: Exception) {}
+                    }
                     navController.navigate("auth") {
                         popUpTo("chat_list") { inclusive = true }
                     }

@@ -65,11 +65,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.*
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
+import com.example.models.UserProfileData
+import com.example.models.UserChatData
+import com.example.models.MessageData
+import com.example.utils.SupabaseSetup
+import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.postgrest.postgrest
+import java.util.UUID
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.security.MessageDigest
@@ -107,6 +109,7 @@ object ChatCrypto {
     }
 }
 
+@kotlinx.serialization.Serializable
 data class ChatAttachment(
     val url: String = "",
     val type: String = "",
@@ -156,8 +159,7 @@ fun ChatScreen(
     val voicePlaybackViewModel = remember { VoicePlaybackManager() }
     val currentlyPlayingVoice by voicePlaybackViewModel.currentVoice.collectAsState()
 
-    val currentUser = FirebaseAuth.getInstance().currentUser ?: return
-    val database = FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/")
+    val currentUser = SupabaseSetup.client.auth.currentUserOrNull() ?: return
 
     var recipientName by remember { mutableStateOf("User") }
     var recipientAvatar by remember { mutableStateOf("") }
@@ -165,15 +167,21 @@ fun ChatScreen(
     var recipientLastSeen by remember { mutableStateOf(0L) }
     
     LaunchedEffect(recipientId) {
-        database.getReference("users").child(recipientId).addValueEventListener(object : com.google.firebase.database.ValueEventListener {
-            override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
-                recipientName = snapshot.child("name").getValue(String::class.java) ?: "User"
-                recipientAvatar = snapshot.child("avatarUrl").getValue(String::class.java) ?: ""
-                recipientOnline = snapshot.child("online").getValue(Boolean::class.java) ?: false
-                recipientLastSeen = snapshot.child("lastSeen").getValue(Long::class.java) ?: 0L
-            }
-            override fun onCancelled(error: com.google.firebase.database.DatabaseError) {}
-        })
+        while (isActive) {
+            try {
+                val userSnap = SupabaseSetup.client.postgrest["users"].select {
+                    filter { eq("uid", recipientId) }
+                }.decodeSingleOrNull<UserProfileData>()
+                
+                if (userSnap != null) {
+                    recipientName = userSnap.name
+                    recipientAvatar = userSnap.avatarUrl
+                    recipientOnline = userSnap.online
+                    recipientLastSeen = userSnap.lastTimestamp
+                }
+            } catch (e: Exception) {}
+            delay(5000)
+        }
     }
     
     DisposableEffect(recipientId) {
@@ -185,7 +193,7 @@ fun ChatScreen(
         }
     }
     
-    val chatId = if (currentUser.uid < recipientId) "${currentUser.uid}_$recipientId" else "${recipientId}_${currentUser.uid}"
+    val chatId = if (currentUser.id < recipientId) "${currentUser.id}_$recipientId" else "${recipientId}_${currentUser.id}"
 
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -204,88 +212,123 @@ fun ChatScreen(
     var showAttachmentMenu by remember { mutableStateOf(false) }
 
     LaunchedEffect(recipientId) {
-        // Listen to messages
-        val messagesRef = database.getReference("chats").child(chatId).child("messages")
-        messagesRef.addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
+        while (isActive) {
+            try {
+                val messagesSnap = SupabaseSetup.client.postgrest["messages"].select {
+                    filter { eq("chat_id", chatId) }
+                }.decodeList<MessageData>()
+                
                 val newMessages = mutableListOf<ChatMessage>()
-                for (child in snapshot.children) {
-                    val id = child.child("id").getValue(String::class.java) ?: ""
-                    val senderId = child.child("senderId").getValue(String::class.java) ?: ""
-                    val encryptedText = child.child("text").getValue(String::class.java) ?: ""
-                    val type = child.child("type").getValue(String::class.java) ?: "text"
-                    val timestamp = child.child("timestamp").getValue(Long::class.java) ?: 0L
-                    val mediaUrl = child.child("mediaUrl").getValue(String::class.java) ?: ""
-                    val replyToMsgId = child.child("replyToMsgId").getValue(String::class.java)
-                    val isRead = child.child("isRead").getValue(Boolean::class.java) ?: false
+                for (child in messagesSnap) {
+                    val id = child.id
+                    val senderId = child.sender_id
+                    val encryptedText = child.text
+                    val type = child.type
+                    val timestamp = child.timestamp
+                    val mediaUrl = child.mediaUrl
+                    val replyToMsgId = child.replyToMsgId
+                    val isRead = child.is_read
                     
                     val decryptedText = if (type == "text") ChatCrypto.decrypt(encryptedText, chatId) else encryptedText
                     
-                    newMessages.add(ChatMessage(id, senderId, decryptedText, type, timestamp, mediaUrl, replyToMsgId, isRead))
+                    newMessages.add(ChatMessage(id, senderId, decryptedText, type, timestamp, mediaUrl, replyToMsgId, isRead, child.attachments))
                     
-                    if (senderId != currentUser.uid && !isRead) {
-                        child.ref.child("isRead").setValue(true)
+                    if (senderId != currentUser.id && !isRead) {
+                        SupabaseSetup.client.postgrest["messages"].update(mapOf("is_read" to true)) {
+                            filter { eq("id", id) }
+                        }
                     }
                 }
                 messages = newMessages.sortedByDescending { it.timestamp }
                 
-                // Reset unread count for current user
-                database.getReference("user_chats").child(currentUser.uid).child(recipientId).child("unreadCount").setValue(0)
-            }
-            override fun onCancelled(error: DatabaseError) {}
-        })
+                SupabaseSetup.client.postgrest["user_chats"].update(mapOf("unread_count" to 0)) {
+                    filter { 
+                        eq("user_id", currentUser.id)
+                        eq("peer_id", recipientId)
+                    }
+                }
+            } catch (e: Exception) {}
+            delay(2000)
+        }
     }
 
     fun sendMessage(text: String, type: String = "text", mediaUrl: String = "", attachments: List<ChatAttachment> = emptyList()) {
         if (text.isBlank() && mediaUrl.isBlank() && attachments.isEmpty()) return
-        val messagesRef = database.getReference("chats").child(chatId).child("messages")
         
         val encryptedText = if (type == "text" || type == "media_group") {
             ChatCrypto.encrypt(text, chatId)
         } else text
         
-        if (messageToEdit != null) {
-            messagesRef.child(messageToEdit!!.id).child("text").setValue(encryptedText)
-            messageToEdit = null
-        } else {
-            val newMsgId = messagesRef.push().key ?: return
-            val msg = ChatMessage(
-                id = newMsgId,
-                senderId = currentUser.uid,
-                text = encryptedText,
-                type = type,
-                timestamp = System.currentTimeMillis(),
-                mediaUrl = mediaUrl,
-                replyToMsgId = replyToMessage?.id,
-                attachments = attachments
-            )
-            messagesRef.child(newMsgId).setValue(msg)
-            
-            val chatMetaMe = mapOf(
-                "lastMessage" to (if (type == "text") encryptedText else "[$type]"),
-                "timestamp" to System.currentTimeMillis(),
-                "lastSenderId" to currentUser.uid
-            )
-            database.getReference("user_chats").child(currentUser.uid).child(recipientId).updateChildren(chatMetaMe)
-            
-            database.getReference("user_chats").child(recipientId).child(currentUser.uid).get().addOnSuccessListener { snap ->
-                val currentUnread = snap.child("unreadCount").getValue(Int::class.java) ?: 0
-                val chatMetaThem = mapOf(
-                    "lastMessage" to (if (type == "text") encryptedText else "[$type]"),
-                    "timestamp" to System.currentTimeMillis(),
-                    "lastSenderId" to currentUser.uid,
-                    "unreadCount" to currentUnread + 1
-                )
-                database.getReference("user_chats").child(recipientId).child(currentUser.uid).updateChildren(chatMetaThem)
-            }
-        }
-        
-        replyToMessage = null
-
         scope.launch {
-            if (messages.isNotEmpty()) {
-                listState.animateScrollToItem(0)
-            }
+            try {
+                if (messageToEdit != null) {
+                    SupabaseSetup.client.postgrest["messages"].update(mapOf("text" to encryptedText)) {
+                        filter { eq("id", messageToEdit!!.id) }
+                    }
+                    messageToEdit = null
+                } else {
+                    val newMsgId = UUID.randomUUID().toString()
+                    val msg = MessageData(
+                        id = newMsgId,
+                        chat_id = chatId,
+                        sender_id = currentUser.id,
+                        text = encryptedText,
+                        type = type,
+                        timestamp = System.currentTimeMillis(),
+                        mediaUrl = mediaUrl,
+                        replyToMsgId = replyToMessage?.id,
+                        is_read = false,
+                        attachments = attachments
+                    )
+                    SupabaseSetup.client.postgrest["messages"].insert(msg)
+                    
+                    val chatMetaMe = mapOf(
+                        "last_message" to (if (type == "text") encryptedText else "[$type]"),
+                        "timestamp" to System.currentTimeMillis(),
+                    )
+                    
+                    val existingMyChat = SupabaseSetup.client.postgrest["user_chats"].select {
+                        filter { eq("user_id", currentUser.id); eq("peer_id", recipientId) }
+                    }.decodeSingleOrNull<UserChatData>()
+                    
+                    if (existingMyChat != null) {
+                        SupabaseSetup.client.postgrest["user_chats"].update(chatMetaMe) {
+                            filter { eq("user_id", currentUser.id); eq("peer_id", recipientId) }
+                        }
+                    } else {
+                        SupabaseSetup.client.postgrest["user_chats"].insert(
+                            UserChatData(currentUser.id, recipientId, System.currentTimeMillis(), 0, chatMetaMe["last_message"].toString())
+                        )
+                    }
+                    
+                    val existingPeerChat = SupabaseSetup.client.postgrest["user_chats"].select {
+                        filter { eq("user_id", recipientId); eq("peer_id", currentUser.id) }
+                    }.decodeSingleOrNull<UserChatData>()
+                    
+                    val currentUnread = existingPeerChat?.unread_count ?: 0
+                    val chatMetaThem = mapOf(
+                        "last_message" to (if (type == "text") encryptedText else "[$type]"),
+                        "timestamp" to System.currentTimeMillis(),
+                        "unread_count" to currentUnread + 1
+                    )
+                    
+                    if (existingPeerChat != null) {
+                        SupabaseSetup.client.postgrest["user_chats"].update(chatMetaThem) {
+                            filter { eq("user_id", recipientId); eq("peer_id", currentUser.id) }
+                        }
+                    } else {
+                        SupabaseSetup.client.postgrest["user_chats"].insert(
+                            UserChatData(recipientId, currentUser.id, System.currentTimeMillis(), 1, chatMetaThem["last_message"].toString())
+                        )
+                    }
+                }
+                
+                replyToMessage = null
+    
+                if (messages.isNotEmpty()) {
+                    listState.animateScrollToItem(0)
+                }
+            } catch (e: Exception) {}
         }
     }
 
@@ -333,7 +376,7 @@ fun ChatScreen(
                 com.example.utils.WebRtcDataChannel.initiateTransfer(
                     context = ctx,
                     chatId = chatId,
-                    senderId = currentUser?.uid ?: "",
+                    senderId = currentUser.id,
                     uri = pending.uri,
                     type = pending.type
                 ) { downloadUri ->
@@ -375,9 +418,16 @@ fun ChatScreen(
                                 Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = "Forward", tint = textColor, modifier = Modifier.scale(scaleX = -1f, scaleY = 1f))
                             }
                             IconButton(onClick = { 
-                                val messagesRef = database.getReference("chats").child(chatId).child("messages")
-                                selectedMessages.forEach { id -> messagesRef.child(id).removeValue() }
-                                selectedMessages = emptySet()
+                                scope.launch {
+                                    try {
+                                        for (id in selectedMessages) {
+                                            SupabaseSetup.client.postgrest["messages"].delete {
+                                                filter { eq("id", id) }
+                                            }
+                                        }
+                                        selectedMessages = emptySet()
+                                    } catch (e: Exception) {}
+                                }
                             }) {
                                 Icon(Icons.Default.Delete, contentDescription = "Delete", tint = textColor)
                             }
@@ -423,7 +473,7 @@ fun ChatScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(messages, key = { it.id }) { msg ->
-                    val isMine = msg.senderId == currentUser.uid
+                    val isMine = msg.senderId == currentUser.id
                     val isSelected = selectedMessages.contains(msg.id)
                     val isHighlighted = highlightedMessageId == msg.id
                     var swipeOffset by remember { mutableFloatStateOf(0f) }
@@ -537,7 +587,7 @@ fun ChatScreen(
                                         Box(modifier = Modifier.width(3.dp).height(24.dp).background(if(isMine) bubbleSentContentColor else textColor, RoundedCornerShape(1.dp)))
                                         Spacer(Modifier.width(6.dp))
                                         Column {
-                                            Text(if (replyMsg.senderId == currentUser.uid) s("Вы", "You") else recipientName, color = if(isMine) bubbleSentContentColor else textColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            Text(if (replyMsg.senderId == currentUser.id) s("Вы", "You") else recipientName, color = if(isMine) bubbleSentContentColor else textColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                             Text(replyMsg.text, color = if (isMine) bubbleSentContentColor else textColor, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                                         }
                                     }
@@ -1215,7 +1265,7 @@ fun ChatScreen(
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp)) {
                 val msg = contextMenuMessage!!
-                val isMine = msg.senderId == currentUser.uid
+                val isMine = msg.senderId == currentUser.id
                 
                 ListItem(
                     headlineContent = { Text("Ответить", color = textColor) },
@@ -1272,7 +1322,7 @@ fun ChatScreen(
     }
 
     if (showDeleteDialog && messageToDelete != null) {
-        val isMine = messageToDelete!!.senderId == currentUser.uid
+        val isMine = messageToDelete!!.senderId == currentUser.id
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showDeleteDialog = false; messageToDelete = null },
             title = { Text("Удалить сообщение?", color = textColor) },
@@ -1281,18 +1331,22 @@ fun ChatScreen(
                 if (isMine) {
                     Column {
                         TextButton(onClick = {
-                            val messagesRef = database.getReference("chats").child(chatId).child("messages")
-                            messagesRef.child(messageToDelete!!.id).removeValue()
+                            scope.launch {
+                                try {
+                                    SupabaseSetup.client.postgrest["messages"].delete { filter { eq("id", messageToDelete!!.id) } }
+                                } catch (e: Exception) {}
+                            }
                             showDeleteDialog = false
                             messageToDelete = null
                         }) {
                             Text("Удалить для всех", color = MaterialTheme.colorScheme.error)
                         }
                         TextButton(onClick = {
-                            // Local delete isn't fully implemented in DB, usually requires a "deletedFor" field.
-                            // For simplicity, we just delete for all here since real logic requires extra fields.
-                            val messagesRef = database.getReference("chats").child(chatId).child("messages")
-                            messagesRef.child(messageToDelete!!.id).removeValue()
+                            scope.launch {
+                                try {
+                                    SupabaseSetup.client.postgrest["messages"].delete { filter { eq("id", messageToDelete!!.id) } }
+                                } catch (e: Exception) {}
+                            }
                             showDeleteDialog = false
                             messageToDelete = null
                         }) {
@@ -1301,8 +1355,11 @@ fun ChatScreen(
                     }
                 } else {
                     TextButton(onClick = {
-                        val messagesRef = database.getReference("chats").child(chatId).child("messages")
-                        messagesRef.child(messageToDelete!!.id).removeValue()
+                        scope.launch {
+                            try {
+                                SupabaseSetup.client.postgrest["messages"].delete { filter { eq("id", messageToDelete!!.id) } }
+                            } catch (e: Exception) {}
+                        }
                         showDeleteDialog = false
                         messageToDelete = null
                     }) {
@@ -1320,15 +1377,14 @@ fun ChatScreen(
     }
 
     if (showForwardDialog) {
-        var chats by remember { mutableStateOf<List<Map<String, String>>>(emptyList()) }
+        var chats by remember { mutableStateOf<List<UserChatData>>(emptyList()) }
         LaunchedEffect(Unit) {
-            database.getReference("user_chats").child(currentUser.uid).get().addOnSuccessListener { snapshot ->
-                val list = mutableListOf<Map<String, String>>()
-                for (child in snapshot.children) {
-                    val peerId = child.key ?: continue
-                    list.add(mapOf("id" to peerId))
-                }
-                chats = list
+            scope.launch {
+                try {
+                    chats = SupabaseSetup.client.postgrest["user_chats"].select {
+                        filter { eq("user_id", currentUser.id) }
+                    }.decodeList<UserChatData>()
+                } catch (e: Exception) {}
             }
         }
         
@@ -1340,14 +1396,21 @@ fun ChatScreen(
                 Text("Переслать в...", color = textColor, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
                 androidx.compose.foundation.lazy.LazyColumn {
                     items(chats) { chatMap ->
-                        val peerId = chatMap["id"] ?: return@items
+                        val peerId = chatMap.peer_id
                         var peerName by remember { mutableStateOf("User") }
                         var peerAvatar by remember { mutableStateOf("") }
                         
                         LaunchedEffect(peerId) {
-                            database.getReference("users").child(peerId).get().addOnSuccessListener { snap ->
-                                peerName = snap.child("name").getValue(String::class.java) ?: "User"
-                                peerAvatar = snap.child("avatarUrl").getValue(String::class.java) ?: ""
+                            scope.launch {
+                                try {
+                                    val userSnap = SupabaseSetup.client.postgrest["users"].select {
+                                        filter { eq("uid", peerId) }
+                                    }.decodeSingleOrNull<UserProfileData>()
+                                    if(userSnap != null) {
+                                        peerName = userSnap.name
+                                        peerAvatar = userSnap.avatarUrl
+                                    }
+                                } catch (e: Exception) {}
                             }
                         }
                         
@@ -1361,35 +1424,42 @@ fun ChatScreen(
                                 }
                             },
                             modifier = Modifier.clickable {
-                                val selectedMsgs = messages.filter { selectedMessages.contains(it.id) }
-                                val targetChatId = if (currentUser.uid < peerId) currentUser.uid + "_" + peerId else peerId + "_" + currentUser.uid
-                                val targetRef = database.getReference("chats").child(targetChatId).child("messages")
-                                
-                                selectedMsgs.forEach { originalMsg ->
-                                    val newMsgId = targetRef.push().key ?: return@forEach
-                                    val decryptedOriginalText = if (originalMsg.type == "text") {
-                                        if (!originalMsg.text.startsWith("[")) {
-                                            try { com.example.ui.screens.chat.ChatCrypto.decrypt(originalMsg.text, chatId) } catch (e: Exception) { originalMsg.text }
-                                        } else originalMsg.text
-                                    } else originalMsg.text
-                                    
-                                    val fwdPrefix = "Переслано:\n" + decryptedOriginalText
-                                    val finalEncrypted = if (originalMsg.type == "text") com.example.ui.screens.chat.ChatCrypto.encrypt(fwdPrefix, targetChatId) else originalMsg.text
-                                    
-                                    val msg = ChatMessage(id = newMsgId, senderId = currentUser.uid, text = finalEncrypted, type = originalMsg.type, timestamp = System.currentTimeMillis(), mediaUrl = originalMsg.mediaUrl)
-                                    targetRef.child(newMsgId).setValue(msg)
-                                    
-                                    val chatMetaMe = mapOf("lastMessage" to (if (originalMsg.type == "text") finalEncrypted else "[${originalMsg.type}]"), "timestamp" to System.currentTimeMillis(), "lastSenderId" to currentUser.uid)
-                                    database.getReference("user_chats").child(currentUser.uid).child(peerId).updateChildren(chatMetaMe)
-                                    
-                                    database.getReference("user_chats").child(peerId).child(currentUser.uid).get().addOnSuccessListener { snap ->
-                                        val u = snap.child("unreadCount").getValue(Int::class.java) ?: 0
-                                        val chatMetaThem = mapOf("lastMessage" to (if (originalMsg.type == "text") finalEncrypted else "[${originalMsg.type}]"), "timestamp" to System.currentTimeMillis(), "lastSenderId" to currentUser.uid, "unreadCount" to u + 1)
-                                        database.getReference("user_chats").child(peerId).child(currentUser.uid).updateChildren(chatMetaThem)
-                                    }
+                                scope.launch {
+                                    try {
+                                        val selectedMsgs = messages.filter { selectedMessages.contains(it.id) }
+                                        val targetChatId = if (currentUser.id < peerId) currentUser.id + "_" + peerId else peerId + "_" + currentUser.id
+                                        
+                                        selectedMsgs.forEach { originalMsg ->
+                                            val newMsgId = UUID.randomUUID().toString()
+                                            val decryptedOriginalText = if (originalMsg.type == "text") {
+                                                if (!originalMsg.text.startsWith("[")) {
+                                                    try { com.example.ui.screens.chat.ChatCrypto.decrypt(originalMsg.text, chatId) } catch (e: Exception) { originalMsg.text }
+                                                } else originalMsg.text
+                                            } else originalMsg.text
+                                            
+                                            val fwdPrefix = "Переслано:\n" + decryptedOriginalText
+                                            val finalEncrypted = if (originalMsg.type == "text") com.example.ui.screens.chat.ChatCrypto.encrypt(fwdPrefix, targetChatId) else originalMsg.text
+                                            
+                                            val msg = MessageData(id = newMsgId, sender_id = currentUser.id, chat_id = targetChatId, text = finalEncrypted, type = originalMsg.type, timestamp = System.currentTimeMillis(), mediaUrl = originalMsg.mediaUrl)
+                                            SupabaseSetup.client.postgrest["messages"].insert(msg)
+                                            
+                                            val chatMetaMe = mapOf("last_message" to (if (originalMsg.type == "text") finalEncrypted else "[${originalMsg.type}]"), "timestamp" to System.currentTimeMillis())
+                                            SupabaseSetup.client.postgrest["user_chats"].update(chatMetaMe) { filter { eq("user_id", currentUser.id); eq("peer_id", peerId) } }
+                                            
+                                            val peerChatSnap = SupabaseSetup.client.postgrest["user_chats"].select { filter { eq("user_id", peerId); eq("peer_id", currentUser.id) } }.decodeSingleOrNull<UserChatData>()
+                                            
+                                            val u = peerChatSnap?.unread_count ?: 0
+                                            val chatMetaThem = mapOf("last_message" to (if (originalMsg.type == "text") finalEncrypted else "[${originalMsg.type}]"), "timestamp" to System.currentTimeMillis(), "unread_count" to u + 1)
+                                            if (peerChatSnap != null) {
+                                                SupabaseSetup.client.postgrest["user_chats"].update(chatMetaThem) { filter { eq("user_id", peerId); eq("peer_id", currentUser.id) } }
+                                            } else {
+                                                SupabaseSetup.client.postgrest["user_chats"].insert(UserChatData(peerId, currentUser.id, System.currentTimeMillis(), 1, chatMetaThem["last_message"].toString()))
+                                            }
+                                        }
+                                        showForwardDialog = false
+                                        selectedMessages = emptySet()
+                                    } catch (e: Exception) {}
                                 }
-                                showForwardDialog = false
-                                selectedMessages = emptySet()
                             },
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                         )
@@ -1438,7 +1508,7 @@ fun ChatScreen(
             CustomAudioPlayer(
                 audioMessages = audioMsgs,
                 initialIndex = if (idx >= 0 && idx < audioMsgs.size) idx else 0,
-                getSenderName = { if (it == currentUser.uid) s("Вы", "You") else recipientName },
+                getSenderName = { if (it == currentUser.id) s("Вы", "You") else recipientName },
                 onDismiss = { showAudioPlayer = false }
             )
         }

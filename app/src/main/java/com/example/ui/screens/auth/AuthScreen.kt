@@ -10,8 +10,13 @@ import androidx.compose.ui.draw.clip
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.FirebaseDatabase
+import com.example.utils.SupabaseSetup
+import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.providers.builtin.Email
+import io.github.jan.supabase.auth.OtpType
+import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.storage.storage
+import kotlinx.serialization.Serializable
 import kotlinx.coroutines.tasks.await
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
@@ -82,6 +87,7 @@ fun AuthScreen(
     var toastMessage by remember { mutableStateOf<String?>(null) }
     var toastIsSuccess by remember { mutableStateOf(false) }
     
+    val context = androidx.compose.ui.platform.LocalContext.current
     var datePickerState = rememberDatePickerState()
     var showDatePicker by remember { mutableStateOf(false) }
     var genderExpanded by remember { mutableStateOf(false) }
@@ -238,7 +244,10 @@ fun AuthScreen(
                                     currentMascotState = MascotState.Loading
                                     scope.launch {
                                         try {
-                                            FirebaseAuth.getInstance().signInWithEmailAndPassword(email.trim(), password).await()
+                                            SupabaseSetup.client.auth.signInWith(Email) {
+                                                this.email = email.trim()
+                                                this.password = password
+                                            }
                                             showToast(s("УЗЕЛ СИНХРОНИЗИРОВАН", "NODE SYNCHRONIZED"), true)
                                             onAuthSuccess()
                                         } catch (e: Exception) {
@@ -290,15 +299,12 @@ fun AuthScreen(
                                     currentMascotState = MascotState.Loading
                                     scope.launch {
                                         try {
-                                            val user = FirebaseAuth.getInstance().createUserWithEmailAndPassword(email.trim(), password).await().user
-                                            
-                                            if (user != null) {
-                                                val verificationCode = (1000..9999).random().toString()
-                                                val db = FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/").getReference("verification_codes").child(user.uid)
-                                                db.setValue(verificationCode).await()
+                                            SupabaseSetup.client.auth.signUpWith(Email) {
+                                                this.email = email.trim()
+                                                this.password = password
                                             }
-
-                                            showToast(s("КОД В БД FIREBASE", "CODE IN FIREBASE DB"), true)
+                                            
+                                            showToast(s("КОД ОТПРАВЛЕН НА ПОЧТУ", "CODE SENT TO EMAIL"), true)
                                             currentMode = AuthMode.VERIFY
                                             currentMascotState = MascotState.Idle
                                         } catch (e: Exception) {
@@ -317,10 +323,10 @@ fun AuthScreen(
                         
                         AuthMode.VERIFY -> {
                             Text(s("ПОДТВЕРЖДЕНИЕ", "VERIFICATION"), color = textColor, fontSize = 20.sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp, modifier = Modifier.padding(bottom = 8.dp))
-                            Text(s("ВВЕДИТЕ КОД ИЗ БД FIREBASE", "ENTER CODE FROM FIREBASE DB"), color = dimTextColor, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, modifier = Modifier.padding(bottom = 40.dp))
+                            Text(s("ВВЕДИТЕ КОД ИЗ ПОЧТЫ", "ENTER CODE FROM EMAIL"), color = dimTextColor, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, modifier = Modifier.padding(bottom = 40.dp))
                             
                             AuthTextField(
-                                value = code, onValueChange = { code = it }, placeholder = s("4-ЗНАЧНЫЙ КОД", "4-DIGIT CODE"),
+                                value = code, onValueChange = { code = it }, placeholder = s("6-ЗНАЧНЫЙ КОД", "6-DIGIT CODE"),
                                 isDarkTheme = isDarkTheme,
                                 onFocus = { if(it) currentMascotState = MascotState.Recall else if(currentMascotState == MascotState.Recall) currentMascotState = MascotState.Idle }
                             )
@@ -330,40 +336,18 @@ fun AuthScreen(
                                     currentMascotState = MascotState.Loading
                                     scope.launch {
                                         try {
-                                            val user = FirebaseAuth.getInstance().currentUser
-                                            if (user != null) {
-                                                val snapshot = FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/")
-                                                    .getReference("verification_codes")
-                                                    .child(user.uid)
-                                                    .get()
-                                                    .await()
-                                                
-                                                val savedCode = snapshot.getValue(String::class.java)
-                                                if (savedCode == code.trim()) {
-                                                    FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/")
-                                                        .getReference("verification_codes")
-                                                        .child(user.uid)
-                                                        .removeValue()
-                                                        .await()
+                                            SupabaseSetup.client.auth.verifyEmailOtp(
+                                                type = OtpType.Email.SIGNUP,
+                                                email = email.trim(),
+                                                token = code.trim()
+                                            )
 
-                                                    showToast(s("ЭМАЙЛ ПОДТВЕРЖДЕН", "EMAIL VERIFIED"), true)
-                                                    currentMode = AuthMode.PROFILE_SETUP
-                                                    currentMascotState = MascotState.Idle
-                                                } else {
-                                                    showToast(s("Неверный код", "Invalid code"))
-                                                    currentMascotState = MascotState.Idle
-                                                }
-                                            } else {
-                                                showToast(s("Ошибка сессии", "Session error"))
-                                                currentMascotState = MascotState.Idle
-                                            }
+                                            showToast(s("ЭМАЙЛ ПОДТВЕРЖДЕН", "EMAIL VERIFIED"), true)
+                                            currentMode = AuthMode.PROFILE_SETUP
+                                            currentMascotState = MascotState.Idle
                                         } catch (e: Exception) {
                                             val msg = e.localizedMessage ?: s("Ошибка", "Error")
-                                            if (msg.contains("Permission denied", ignoreCase = true)) {
-                                                showToast(s("Измените правила БД (read: auth != null)", "Change DB rules (read: auth != null)"))
-                                            } else {
-                                                showToast(msg)
-                                            }
+                                            showToast(msg)
                                             currentMascotState = MascotState.Idle
                                         }
                                     }
@@ -465,30 +449,46 @@ fun AuthScreen(
                                     currentMascotState = MascotState.Loading
                                     scope.launch {
                                         try {
-                                            val user = FirebaseAuth.getInstance().currentUser
+                                            val user = SupabaseSetup.client.auth.currentUserOrNull()
                                             if (user != null) {
-                                                val db = FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/").getReference("users").child(user.uid)
                                                 var finalAvatarUrl = ""
                                                 if (profileAvatarUri != null) {
                                                     try {
-                                                        val storageRef = com.google.firebase.storage.FirebaseStorage.getInstance().getReference("avatars/${user.uid}.jpg")
-                                                        storageRef.putFile(profileAvatarUri!!).await()
-                                                        finalAvatarUrl = storageRef.downloadUrl.await().toString()
+                                                        val bytes = context.contentResolver.openInputStream(profileAvatarUri!!)?.readBytes()
+                                                        if (bytes != null) {
+                                                            SupabaseSetup.client.storage.from("avatars").upload("${user.id}.jpg", bytes)
+                                                            finalAvatarUrl = SupabaseSetup.client.storage.from("avatars").publicUrl("${user.id}.jpg")
+                                                        }
                                                     } catch (e: Exception) {
                                                         e.printStackTrace()
                                                     }
                                                 }
-                                                val userData = mapOf(
-                                                    "uid" to user.uid,
-                                                    "email" to user.email,
-                                                    "name" to profileName,
-                                                    "username" to profileUsername,
-                                                    "bio" to profileBio,
-                                                    "gender" to profileGender,
-                                                    "birthday" to profileBirthday,
-                                                    "avatarUrl" to finalAvatarUrl
+                                                
+                                                @Serializable
+                                                data class UserProfileData(
+                                                    val uid: String,
+                                                    val email: String?,
+                                                    val name: String,
+                                                    val username: String,
+                                                    val bio: String,
+                                                    val gender: String,
+                                                    val birthday: String,
+                                                    val avatarUrl: String
                                                 )
-                                                db.setValue(userData).await()
+                                                
+                                                val userData = UserProfileData(
+                                                    uid = user.id,
+                                                    email = user.email,
+                                                    name = profileName,
+                                                    username = profileUsername,
+                                                    bio = profileBio,
+                                                    gender = profileGender,
+                                                    birthday = profileBirthday,
+                                                    avatarUrl = finalAvatarUrl
+                                                )
+                                                
+                                                SupabaseSetup.client.postgrest["users"].insert(userData)
+                                                
                                                 showToast(s("ЛИЧНОСТЬ СОЗДАНА", "IDENTITY CREATED"), true)
                                                 onAuthSuccess()
                                             } else {
@@ -524,7 +524,7 @@ fun AuthScreen(
                                     currentMascotState = MascotState.Loading
                                     scope.launch {
                                         try {
-                                            FirebaseAuth.getInstance().sendPasswordResetEmail(email.trim()).await()
+                                            SupabaseSetup.client.auth.resetPasswordForEmail(email.trim())
                                             showToast(s("ССЫЛКА ОТПРАВЛЕНА", "LINK SENT"), true)
                                             currentMode = AuthMode.LOGIN
                                             currentMascotState = MascotState.Idle

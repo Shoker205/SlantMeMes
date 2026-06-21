@@ -22,8 +22,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.*
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.FirebaseDatabase
+import com.example.models.UserProfileData
+import com.example.models.ContactData
+import com.example.utils.SupabaseSetup
+import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
@@ -44,8 +47,7 @@ fun OtherProfileScreen(
     var isContact by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
-    val currentUser = FirebaseAuth.getInstance().currentUser
-    val database = FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/")
+    val currentUser = SupabaseSetup.client.auth.currentUserOrNull()
 
     val selectedLanguage by com.example.AppPreferences.language.collectAsState()
     val s: (String, String) -> String = { ru, en -> if (selectedLanguage == "English") en else ru }
@@ -61,22 +63,27 @@ fun OtherProfileScreen(
         if (currentUser != null) {
             try {
                 // Load User Profile details
-                val snapshot = database.getReference("users").child(userId).get().await()
-                name = snapshot.child("name").getValue(String::class.java) ?: s("Пользователь", "User")
-                username = snapshot.child("username").getValue(String::class.java) ?: ""
-                bio = snapshot.child("bio").getValue(String::class.java) ?: ""
-                gender = snapshot.child("gender").getValue(String::class.java) ?: ""
-                birthday = snapshot.child("birthday").getValue(String::class.java) ?: ""
-                avatarUrl = snapshot.child("avatarUrl").getValue(String::class.java) ?: ""
+                val snapshot = SupabaseSetup.client.postgrest["users"].select {
+                    filter { eq("uid", userId) }
+                }.decodeSingleOrNull<UserProfileData>()
+                
+                if (snapshot != null) {
+                    name = snapshot.name
+                    username = snapshot.username
+                    bio = snapshot.bio
+                    gender = snapshot.gender
+                    birthday = snapshot.birthday
+                    avatarUrl = snapshot.avatarUrl
+                }
 
                 // Verify contact status
-                val contactSnap = database.getReference("users")
-                    .child(currentUser.uid)
-                    .child("contacts")
-                    .child(userId)
-                    .get()
-                    .await()
-                isContact = contactSnap.exists()
+                val contactRecord = SupabaseSetup.client.postgrest["contacts"].select {
+                    filter {
+                        eq("user_id", currentUser.id)
+                        eq("contact_id", userId)
+                    }
+                }.decodeList<ContactData>().firstOrNull()
+                isContact = (contactRecord != null)
             } catch (e: Exception) {
                 // Keep default empty values
             }
@@ -182,17 +189,18 @@ fun OtherProfileScreen(
                     onClick = {
                         scope.launch {
                             if (currentUser != null) {
-                                val contactsRef = database.getReference("users")
-                                    .child(currentUser.uid)
-                                    .child("contacts")
-                                    .child(userId)
-                                
                                 if (isContact) {
-                                    contactsRef.removeValue().await()
+                                    SupabaseSetup.client.postgrest["contacts"].delete {
+                                        filter {
+                                            eq("user_id", currentUser.id)
+                                            eq("contact_id", userId)
+                                        }
+                                    }
                                     isContact = false
                                     com.example.ui.screens.chat.ContactsCache.cachedContacts = null
                                 } else {
-                                    contactsRef.setValue(true).await()
+                                    val contactData = ContactData(user_id = currentUser.id, contact_id = userId)
+                                    SupabaseSetup.client.postgrest["contacts"].insert(contactData)
                                     isContact = true
                                     com.example.ui.screens.chat.ContactsCache.cachedContacts = null
                                 }

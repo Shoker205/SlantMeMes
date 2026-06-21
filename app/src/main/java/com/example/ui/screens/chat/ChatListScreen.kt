@@ -32,8 +32,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.*
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.FirebaseDatabase
+import com.example.models.UserProfileData
+import com.example.models.ContactData
+import com.example.models.UserChatData
+import com.example.utils.SupabaseSetup
+import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.postgrest.postgrest
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import androidx.compose.runtime.LaunchedEffect
@@ -82,8 +88,7 @@ fun ChatListScreen(
     var contactsList by remember { mutableStateOf<List<UserProfile>>(ContactsCache.cachedContacts ?: emptyList()) }
     var isLoadingContacts by remember { mutableStateOf(false) }
 
-    val currentUser = FirebaseAuth.getInstance().currentUser
-    val database = FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/")
+    val currentUser = SupabaseSetup.client.auth.currentUserOrNull()
 
     // Load contacts implementation
     LaunchedEffect(selectedDockTab, searchQuery) {
@@ -94,22 +99,19 @@ fun ChatListScreen(
             }
             isLoadingContacts = true
             try {
-                val contactsSnap = database.getReference("users")
-                    .child(currentUser.uid)
-                    .child("contacts")
-                    .get()
-                    .await()
+                val contactsSnap = SupabaseSetup.client.postgrest["contacts"].select {
+                    filter { eq("user_id", currentUser.id) }
+                }.decodeList<ContactData>()
                 
                 val list = mutableListOf<UserProfile>()
-                for (child in contactsSnap.children) {
-                    val uid = child.key ?: continue
-                    val userSnap = database.getReference("users").child(uid).get().await()
-                    if (userSnap.exists()) {
-                        val name = userSnap.child("name").getValue(String::class.java) ?: "User"
-                        val username = userSnap.child("username").getValue(String::class.java) ?: ""
-                        val avatarUrl = userSnap.child("avatarUrl").getValue(String::class.java) ?: ""
-                        val isOnline = userSnap.child("online").getValue(Boolean::class.java) ?: false
-                        list.add(UserProfile(uid, name, username, avatarUrl, isOnline))
+                if (contactsSnap.isNotEmpty()) {
+                    val contactIds = contactsSnap.map { it.contact_id }
+                    val profiles = SupabaseSetup.client.postgrest["users"].select {
+                        filter { isIn("uid", contactIds) }
+                    }.decodeList<UserProfileData>()
+                    
+                    for (p in profiles) {
+                        list.add(UserProfile(p.uid, p.name, p.username, p.avatarUrl, p.online))
                     }
                 }
                 contactsList = list
@@ -126,21 +128,15 @@ fun ChatListScreen(
         if (searchQuery.isNotBlank() && currentUser != null) {
             isSearching = true
             try {
-                val usersSnap = database.getReference("users").get().await()
-                val list = mutableListOf<UserProfile>()
                 val queryClean = searchQuery.trim().lowercase().removePrefix("@")
+                val profiles = SupabaseSetup.client.postgrest["users"].select {
+                    filter { ilike("username", "%${queryClean}%") }
+                }.decodeList<UserProfileData>()
                 
-                for (child in usersSnap.children) {
-                    val uid = child.key ?: continue
-                    if (uid == currentUser.uid) continue // skip myself
-                    
-                    val uName = child.child("name").getValue(String::class.java) ?: ""
-                    val uUsername = child.child("username").getValue(String::class.java) ?: ""
-                    val uAvatarUrl = child.child("avatarUrl").getValue(String::class.java) ?: ""
-                    val uIsOnline = child.child("online").getValue(Boolean::class.java) ?: false
-                    
-                    if (uUsername.lowercase().contains(queryClean)) {
-                        list.add(UserProfile(uid, uName, uUsername, uAvatarUrl, uIsOnline))
+                val list = mutableListOf<UserProfile>()
+                for (p in profiles) {
+                    if (p.uid != currentUser.id) {
+                        list.add(UserProfile(p.uid, p.name, p.username, p.avatarUrl, p.online))
                     }
                 }
                 searchResults = list
@@ -165,24 +161,24 @@ fun ChatListScreen(
         }
         
         try {
-            val user = FirebaseAuth.getInstance().currentUser
+            val user = SupabaseSetup.client.auth.currentUserOrNull()
             if (user != null) {
-                val snapshot = FirebaseDatabase.getInstance("https://slantmes-64dbf-default-rtdb.europe-west1.firebasedatabase.app/")
-                    .getReference("users")
-                    .child(user.uid)
-                    .get()
-                    .await()
+                val snapshot = SupabaseSetup.client.postgrest["users"].select {
+                    filter { eq("uid", user.id) }
+                }.decodeSingleOrNull<UserProfileData>()
                 
-                profileName = snapshot.child("name").getValue(String::class.java) ?: "Name"
-                val un = snapshot.child("username").getValue(String::class.java) ?: ""
-                profileUsername = if (un.isNotBlank()) "@$un" else user.email ?: "@username"
-                profileAvatarUrl = snapshot.child("avatarUrl").getValue(String::class.java) ?: ""
+                if (snapshot != null) {
+                    profileName = snapshot.name
+                    val un = snapshot.username
+                    profileUsername = if (un.isNotBlank()) "@$un" else user.email ?: "@username"
+                    profileAvatarUrl = snapshot.avatarUrl
                 
-                val jo = org.json.JSONObject()
-                jo.put("name", profileName)
-                jo.put("username", profileUsername)
-                jo.put("avatarUrl", profileAvatarUrl)
-                com.example.AppPreferences.saveProfileCache(jo.toString())
+                    val jo = org.json.JSONObject()
+                    jo.put("name", profileName)
+                    jo.put("username", profileUsername)
+                    jo.put("avatarUrl", profileAvatarUrl)
+                    com.example.AppPreferences.saveProfileCache(jo.toString())
+                }
             }
         } catch (e: Exception) {
             // keep defaults
@@ -217,18 +213,21 @@ fun ChatListScreen(
                 } catch (e: Exception) {}
             }
             
-            val userChatsRef = database.getReference("user_chats").child(currentUser.uid)
-            userChatsRef.addValueEventListener(object : com.google.firebase.database.ValueEventListener {
-                override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
-                    scope.launch {
+            scope.launch {
+                while (isActive) {
+                    try {
+                        val userChats = SupabaseSetup.client.postgrest["user_chats"].select {
+                            filter { eq("user_id", currentUser.id) }
+                        }.decodeList<UserChatData>()
+                        
                         val chatsList = mutableListOf<ChatItem>()
-                        for (child in snapshot.children) {
-                            val peerId = child.key ?: continue
-                            val timestamp = child.child("timestamp").getValue(Long::class.java) ?: 0L
-                            val unreadCount = child.child("unreadCount").getValue(Int::class.java) ?: 0
-                            val encryptedLastMessage = child.child("lastMessage").getValue(String::class.java) ?: ""
+                        for (chat in userChats) {
+                            val peerId = chat.peer_id
+                            val timestamp = chat.timestamp
+                            val unreadCount = chat.unread_count
+                            val encryptedLastMessage = chat.last_message
                             
-                            val chatId = if (currentUser.uid < peerId) currentUser.uid + "_" + peerId else peerId + "_" + currentUser.uid
+                            val chatId = if (currentUser.id < peerId) currentUser.id + "_" + peerId else peerId + "_" + currentUser.id
                             val lastMessage = if (encryptedLastMessage.isNotBlank() && !encryptedLastMessage.startsWith("[")) {
                                 try { ChatCrypto.decrypt(encryptedLastMessage, chatId) } catch (e: Exception) { encryptedLastMessage }
                             } else {
@@ -236,14 +235,11 @@ fun ChatListScreen(
                             }
                             
                             try {
-                                val userSnap = database.getReference("users").child(peerId).get().await()
-                                val name = userSnap.child("name").getValue(String::class.java) ?: "User"
-                                val avatarUrl = userSnap.child("avatarUrl").getValue(String::class.java) ?: ""
-                                val isOnline = userSnap.child("online").getValue(Boolean::class.java) ?: false
-                                chatsList.add(ChatItem(peerId, name, lastMessage, isOnline, timestamp, avatarUrl, unreadCount))
-                            } catch (e: Exception) {
-                                // Ignore
-                            }
+                                val userSnap = SupabaseSetup.client.postgrest["users"].select { filter { eq("uid", peerId) } }.decodeSingleOrNull<UserProfileData>()
+                                if (userSnap != null) {
+                                    chatsList.add(ChatItem(peerId, userSnap.name, lastMessage, userSnap.online, timestamp, userSnap.avatarUrl, unreadCount))
+                                }
+                            } catch (e: Exception) {}
                         }
                         chatsList.sortByDescending { it.timestamp }
                         chats = chatsList
@@ -263,10 +259,10 @@ fun ChatListScreen(
                             }
                             com.example.AppPreferences.saveChatsCache(ja.toString())
                         } catch (e: Exception) {}
-                    }
+                    } catch (e: Exception) {}
+                    delay(5000) // Poll every 5s
                 }
-                override fun onCancelled(error: com.google.firebase.database.DatabaseError) {}
-            })
+            }
         }
     }
 
@@ -449,7 +445,16 @@ fun ChatListScreen(
                                                     detectHorizontalDragGestures(
                                                         onDragEnd = {
                                                             if (kotlin.math.abs(swipeOffset) > 100f && chat.unreadCount > 0 && currentUser != null) {
-                                                                database.getReference("user_chats").child(currentUser.uid).child(chat.id).child("unreadCount").setValue(0)
+                                                                scope.launch {
+                                                                    try {
+                                                                        SupabaseSetup.client.postgrest["user_chats"].update(mapOf("unread_count" to 0)) {
+                                                                            filter {
+                                                                                eq("user_id", currentUser.id)
+                                                                                eq("peer_id", chat.id)
+                                                                            }
+                                                                        }
+                                                                    } catch (e: Exception) {}
+                                                                }
                                                             }
                                                             swipeOffset = 0f
                                                         },
