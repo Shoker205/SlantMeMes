@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
@@ -235,9 +236,14 @@ fun ChatListScreen(
                             }
                             
                             try {
-                                val userSnap = SupabaseSetup.client.postgrest["users"].select { filter { eq("uid", peerId) } }.decodeSingleOrNull<UserProfileData>()
-                                if (userSnap != null) {
-                                    chatsList.add(ChatItem(peerId, userSnap.name, lastMessage, userSnap.online, timestamp, userSnap.avatarUrl, unreadCount))
+                                if (peerId == currentUser.id) {
+                                    val savedName = if (selectedLanguage == "English") "Saved Messages" else "Избранное"
+                                    chatsList.add(ChatItem(peerId, savedName, lastMessage, false, timestamp, "saved_messages", unreadCount))
+                                } else {
+                                    val userSnap = SupabaseSetup.client.postgrest["users"].select { filter { eq("uid", peerId) } }.decodeSingleOrNull<UserProfileData>()
+                                    if (userSnap != null) {
+                                        chatsList.add(ChatItem(peerId, userSnap.name, lastMessage, userSnap.online && (System.currentTimeMillis() - userSnap.lastTimestamp < 90_000), timestamp, userSnap.avatarUrl, unreadCount))
+                                    }
                                 }
                             } catch (e: Exception) {}
                         }
@@ -476,11 +482,13 @@ fun ChatListScreen(
                                             modifier = Modifier
                                                 .size(48.dp)
                                                 .clip(RoundedCornerShape(16.dp))
-                                                .background(surfaceColor)
+                                                .background(if (chat.avatarUrl == "saved_messages") Color(0xFF64B5F6) else surfaceColor)
                                                 .border(1.dp, borderColor, RoundedCornerShape(16.dp)),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            if (chat.avatarUrl.isNotBlank()) {
+                                            if (chat.avatarUrl == "saved_messages") {
+                                                Icon(Icons.Default.Bookmark, contentDescription = null, tint = Color.White)
+                                            } else if (chat.avatarUrl.isNotBlank()) {
                                                 com.example.ui.components.AvatarImage(
                                                     avatarUrl = chat.avatarUrl,
                                                     contentDescription = s("Аватар", "Avatar"),

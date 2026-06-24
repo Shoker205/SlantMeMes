@@ -112,7 +112,12 @@ fun MainAppNavigation() {
                     navController.navigate("other_profile/$userId")
                 },
                 onUserMentionClick = { mentionedUserId ->
-                    navController.navigate("other_profile/$mentionedUserId")
+                    val currentUser = com.example.utils.SupabaseSetup.client.auth.currentUserOrNull()
+                    if (currentUser != null && currentUser.id == mentionedUserId) {
+                        navController.navigate("profile")
+                    } else {
+                        navController.navigate("other_profile/$mentionedUserId")
+                    }
                 }
             )
         }

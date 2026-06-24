@@ -41,6 +41,9 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bookmark
+import io.github.jan.supabase.storage.storage
+import kotlinx.coroutines.withContext
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -168,6 +171,13 @@ fun ChatScreen(
     var recipientLastSeen by remember { mutableStateOf(0L) }
     
     LaunchedEffect(recipientId) {
+        if (recipientId == currentUser.id) {
+            recipientName = if (selectedLanguage == "English") "Saved Messages" else "Избранное"
+            recipientAvatar = ""
+            recipientOnline = false
+            recipientLastSeen = 0L
+            return@LaunchedEffect
+        }
         while (isActive) {
             try {
                 val userSnap = SupabaseSetup.client.postgrest["users"].select {
@@ -365,36 +375,38 @@ fun ChatScreen(
         isUploading = true
         pendingAttachments = emptyList() // clear
         
-        // Background upload process that waits for recipient to be online
-        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
-            // Wait for receiver to be online (simulating WebRTC requirement)
-            while (!recipientOnline) {
-                kotlinx.coroutines.delay(2000)
-            }
-            
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val uploadedAttachments = mutableListOf<ChatAttachment>()
-            var uploadsCompleted = 0
+            var allSuccess = true
             
             attachmentsToUpload.forEach { pending ->
-                com.example.utils.WebRtcDataChannel.initiateTransfer(
-                    context = ctx,
-                    chatId = chatId,
-                    senderId = currentUser.id,
-                    uri = pending.uri,
-                    type = pending.type
-                ) { downloadUri ->
-                    uploadedAttachments.add(ChatAttachment(url = downloadUri, type = pending.type, filename = pending.uri.lastPathSegment ?: "file"))
-                    uploadsCompleted++
-                    if (uploadsCompleted == attachmentsToUpload.size) {
-                        isUploading = false
-                        val sendType = if (uploadedAttachments.size == 1 && text.isBlank()) pending.type else "media_group"
-                        sendMessage(
-                            text = text,
-                            type = sendType,
-                            mediaUrl = uploadedAttachments.firstOrNull()?.url ?: "",
-                            attachments = uploadedAttachments
-                        )
+                try {
+                    val bytes = ctx.contentResolver.openInputStream(pending.uri)?.readBytes()
+                    if (bytes != null) {
+                        val filename = java.util.UUID.randomUUID().toString() + "_" + (pending.uri.lastPathSegment ?: "file")
+                        SupabaseSetup.client.storage.from("chat_media").upload(filename, bytes) { upsert = true }
+                        val publicUrl = SupabaseSetup.client.storage.from("chat_media").publicUrl(filename)
+                        uploadedAttachments.add(ChatAttachment(url = publicUrl, type = pending.type, filename = pending.uri.lastPathSegment ?: "file"))
+                    } else {
+                        allSuccess = false
                     }
+                } catch (e: Exception) {
+                    allSuccess = false
+                }
+            }
+            
+            withContext(kotlinx.coroutines.Dispatchers.Main) {
+                isUploading = false
+                if (allSuccess || uploadedAttachments.isNotEmpty()) {
+                    val sendType = if (uploadedAttachments.size == 1 && text.isBlank()) attachmentsToUpload.first().type else "media_group"
+                    sendMessage(
+                        text = text,
+                        type = sendType,
+                        mediaUrl = uploadedAttachments.firstOrNull()?.url ?: "",
+                        attachments = uploadedAttachments
+                    )
+                } else {
+                    android.widget.Toast.makeText(ctx, s("Ошибка загрузки медиа", "Media upload error"), android.widget.Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -440,32 +452,40 @@ fun ChatScreen(
                             }
                             Row(modifier = Modifier.weight(1f).clickable { onProfileClick() }, verticalAlignment = Alignment.CenterVertically) {
                                 Box(modifier = Modifier.size(40.dp)) {
-                                    com.example.ui.components.AvatarImage(
-                                        avatarUrl = recipientAvatar,
-                                        contentDescription = "Avatar",
-                                        modifier = Modifier.fillMaxSize().clip(CircleShape).background(Color.Gray)
-                                    )
-                                    if (recipientOnline) {
-                                        Box(
-                                            modifier = Modifier
-                                                .align(Alignment.BottomEnd)
-                                                .size(12.dp)
-                                                .clip(CircleShape)
-                                                .background(Color.Green)
-                                                .border(2.dp, surfaceColor, CircleShape)
+                                    if (recipientId == currentUser.id) {
+                                        Box(modifier = Modifier.fillMaxSize().clip(CircleShape).background(Color(0xFF64B5F6)), contentAlignment = Alignment.Center) {
+                                            Icon(Icons.Default.Bookmark, contentDescription = null, tint = Color.White)
+                                        }
+                                    } else {
+                                        com.example.ui.components.AvatarImage(
+                                            avatarUrl = recipientAvatar,
+                                            contentDescription = "Avatar",
+                                            modifier = Modifier.fillMaxSize().clip(CircleShape).background(Color.Gray)
                                         )
+                                        if (recipientOnline) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .align(Alignment.BottomEnd)
+                                                    .size(12.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color.Green)
+                                                    .border(2.dp, surfaceColor, CircleShape)
+                                            )
+                                        }
                                     }
                                 }
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column {
                                     Text(recipientName, color = textColor, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, lineHeight = 20.sp)
-                                    if (recipientOnline) {
-                                        Text(s("онлайн", "online"), color = Color(0xFF4CAF50), fontSize = 12.sp, lineHeight = 16.sp)
-                                    } else if (recipientLastSeen > 0L) {
-                                        val dateStr = java.text.SimpleDateFormat("HH:mm, dd MMM", java.util.Locale.getDefault()).format(java.util.Date(recipientLastSeen))
-                                        Text(s("был(а) $dateStr", "last seen $dateStr"), color = dimTextColor, fontSize = 12.sp, lineHeight = 16.sp)
-                                    } else {
-                                        Text(s("офлайн", "offline"), color = dimTextColor, fontSize = 12.sp, lineHeight = 16.sp)
+                                    if (recipientId != currentUser.id) {
+                                        if (recipientOnline) {
+                                            Text(s("онлайн", "online"), color = Color(0xFF4CAF50), fontSize = 12.sp, lineHeight = 16.sp)
+                                        } else if (recipientLastSeen > 0L) {
+                                            val dateStr = java.text.SimpleDateFormat("HH:mm, dd MMM", java.util.Locale.getDefault()).format(java.util.Date(recipientLastSeen))
+                                            Text(s("был(а) $dateStr", "last seen $dateStr"), color = dimTextColor, fontSize = 12.sp, lineHeight = 16.sp)
+                                        } else {
+                                            Text(s("офлайн", "offline"), color = dimTextColor, fontSize = 12.sp, lineHeight = 16.sp)
+                                        }
                                     }
                                 }
                             }
@@ -708,6 +728,13 @@ fun ChatScreen(
                                                         }
                                                     }
                                                 )
+                                                val urlRegex = "((https?://)?(www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{1,256}\\.[a-zA-Z0-9()]{2,6}\\b([-a-zA-Z0-9()@:%_\\+.~#?&//=]*))".toRegex(RegexOption.IGNORE_CASE)
+                                                val firstUrl = urlRegex.find(msg.text)?.value
+                                                var showPreview by remember { mutableStateOf(true) }
+                                                if (firstUrl != null && showPreview) {
+                                                    Spacer(modifier = Modifier.height(8.dp))
+                                                    com.example.ui.components.LinkPreview(url = firstUrl, isDarkTheme = isDarkTheme, onHide = { showPreview = false })
+                                                }
                                             }
                                         }
                                     } else {
@@ -731,6 +758,13 @@ fun ChatScreen(
                                                         }
                                                     }
                                                 )
+                                                val urlRegex = "((https?://)?(www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{1,256}\\.[a-zA-Z0-9()]{2,6}\\b([-a-zA-Z0-9()@:%_\\+.~#?&//=]*))".toRegex(RegexOption.IGNORE_CASE)
+                                                val firstUrl = urlRegex.find(msg.text)?.value
+                                                var showPreview by remember { mutableStateOf(true) }
+                                                if (firstUrl != null && showPreview) {
+                                                    Spacer(modifier = Modifier.height(8.dp))
+                                                    com.example.ui.components.LinkPreview(url = firstUrl, isDarkTheme = isDarkTheme, onHide = { showPreview = false })
+                                                }
                                             }
                                             "image", "video" -> {
                                     Column {
@@ -1964,7 +1998,7 @@ fun LinkifiedText(
     onUserClick: (String) -> Unit = {}
 ) {
     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
-    val urlRegex = "(https?://[\\w-]+(\\.[\\w-]+)+(/[-\\w ./?%&=]*)?)".toRegex()
+    val urlRegex = "((https?://)?(www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{1,256}\\.[a-zA-Z0-9()]{2,6}\\b([-a-zA-Z0-9()@:%_\\+.~#?&//=]*))".toRegex(RegexOption.IGNORE_CASE)
     val userRegex = "@([a-zA-Z0-9_]{3,16})".toRegex()
     
     val annotatedString = androidx.compose.ui.text.buildAnnotatedString {
@@ -2009,7 +2043,13 @@ fun LinkifiedText(
         ),
         onClick = { offset ->
             annotatedString.getStringAnnotations("URL", offset, offset).firstOrNull()?.let { annotation ->
-                try { uriHandler.openUri(annotation.item) } catch(e: Exception) {}
+                try {
+                    var urlToOpen = annotation.item
+                    if (!urlToOpen.startsWith("http://") && !urlToOpen.startsWith("https://")) {
+                        urlToOpen = "https://$urlToOpen"
+                    }
+                    uriHandler.openUri(urlToOpen)
+                } catch(e: Exception) {}
             }
             annotatedString.getStringAnnotations("USER", offset, offset).firstOrNull()?.let { annotation ->
                 onUserClick(annotation.item)

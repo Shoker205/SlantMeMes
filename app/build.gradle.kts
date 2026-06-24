@@ -108,6 +108,7 @@ dependencies {
   
   // Supabase
   implementation(libs.supabase.gotrue)
+  implementation("org.jsoup:jsoup:1.17.2")
   implementation(libs.supabase.postgrest)
   implementation(libs.supabase.storage)
   implementation(libs.supabase.realtime)

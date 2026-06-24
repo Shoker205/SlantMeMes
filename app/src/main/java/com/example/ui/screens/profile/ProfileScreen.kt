@@ -102,11 +102,24 @@ fun ProfileScreen(
         if (uri != null) {
             scope.launch {
                 isLoading = true
-                val base64 = compressUriToBase64(context, uri)
-                if (base64 != null) {
-                    avatarUrl = "data:image/jpeg;base64,$base64"
-                } else {
-                    snackbarHostState.showSnackbar(s("Не удалось обработать изображение", "Failed to process image"))
+                try {
+                    val bytes = context.contentResolver.openInputStream(uri)?.readBytes()
+                    if (bytes != null && user != null) {
+                        SupabaseSetup.client.storage.from("avatars").upload("${user.id}.jpg", bytes) { upsert = true }
+                        val publicUrl = SupabaseSetup.client.storage.from("avatars").publicUrl("${user.id}.jpg")
+                        // Append timestamp to avoid caching
+                        avatarUrl = "$publicUrl?t=${System.currentTimeMillis()}"
+                        
+                        // Automatically save to database
+                        val userData = mapOf("avatarUrl" to avatarUrl)
+                        SupabaseSetup.client.postgrest["users"].update(userData) {
+                            filter { eq("uid", user.id) }
+                        }
+                    } else {
+                        snackbarHostState.showSnackbar(s("Не удалось обработать изображение", "Failed to process image"))
+                    }
+                } catch(e: Exception) {
+                    snackbarHostState.showSnackbar(e.localizedMessage ?: "Upload error")
                 }
                 isLoading = false
             }

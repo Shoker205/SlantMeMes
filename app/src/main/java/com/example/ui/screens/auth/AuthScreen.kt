@@ -466,7 +466,8 @@ fun AuthScreen(
                                                         val bytes = context.contentResolver.openInputStream(profileAvatarUri!!)?.readBytes()
                                                         if (bytes != null) {
                                                             SupabaseSetup.client.storage.from("avatars").upload("${user.id}.jpg", bytes) { upsert = true }
-                                                            finalAvatarUrl = SupabaseSetup.client.storage.from("avatars").publicUrl("${user.id}.jpg")
+                                                            val basePublicUrl = SupabaseSetup.client.storage.from("avatars").publicUrl("${user.id}.jpg")
+                                                            finalAvatarUrl = "$basePublicUrl?t=${System.currentTimeMillis()}"
                                                         }
                                                     } catch (e: Exception) {
                                                         e.printStackTrace()
