@@ -528,7 +528,7 @@ fun AuthScreen(
                                 onFocus = { if(it) currentMascotState = MascotState.Recall else if(currentMascotState == MascotState.Recall) currentMascotState = MascotState.Idle }
                             )
                             Spacer(Modifier.height(32.dp))
-                            MainButton(s("ОТПРАВИТЬ ССЫЛКУ", "SEND LINK"), isDarkTheme) {
+                            MainButton(s("ОТПРАВИТЬ КОД", "SEND CODE"), isDarkTheme) {
                                 if (email.isNotBlank()) {
                                     currentMascotState = MascotState.Loading
                                     scope.launch {
