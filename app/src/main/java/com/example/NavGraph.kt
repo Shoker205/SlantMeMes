@@ -110,6 +110,9 @@ fun MainAppNavigation() {
                 },
                 onProfileClick = {
                     navController.navigate("other_profile/$userId")
+                },
+                onUserMentionClick = { mentionedUserId ->
+                    navController.navigate("other_profile/$mentionedUserId")
                 }
             )
         }

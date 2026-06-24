@@ -135,7 +135,8 @@ data class ChatMessage(
 fun ChatScreen(
     recipientId: String,
     onBack: () -> Unit,
-    onProfileClick: () -> Unit = {}
+    onProfileClick: () -> Unit = {},
+    onUserMentionClick: (String) -> Unit = {}
 ) {
     var messages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
     val selectedLanguage by com.example.AppPreferences.language.collectAsState()
@@ -176,7 +177,7 @@ fun ChatScreen(
                 if (userSnap != null) {
                     recipientName = userSnap.name
                     recipientAvatar = userSnap.avatarUrl
-                    recipientOnline = userSnap.online
+                    recipientOnline = userSnap.online && (System.currentTimeMillis() - userSnap.lastTimestamp < 90_000)
                     recipientLastSeen = userSnap.lastTimestamp
                 }
             } catch (e: Exception) {}
@@ -690,17 +691,45 @@ fun ChatScreen(
                                                 }
                                             }
                                             if (msg.text.isNotBlank() && msg.text != "Файлы" && msg.text != "[Фото]" && msg.text != "[Видео]" && msg.text != "[Аудио]") {
-                                                Text(msg.text, color = if(isMine) bubbleSentContentColor else textColor, fontSize = 15.sp)
+                                                LinkifiedText(
+                                                    text = msg.text,
+                                                    color = if(isMine) bubbleSentContentColor else textColor,
+                                                    fontSize = 15.sp,
+                                                    onUserClick = { username ->
+                                                        scope.launch {
+                                                            try {
+                                                                val user = com.example.utils.SupabaseSetup.client.postgrest["users"].select {
+                                                                    filter { eq("username", username) }
+                                                                }.decodeSingleOrNull<com.example.models.UserProfileData>()
+                                                                if (user != null) {
+                                                                    onUserMentionClick(user.uid)
+                                                                }
+                                                            } catch (e: Exception) {}
+                                                        }
+                                                    }
+                                                )
                                             }
                                         }
                                     } else {
                                         when (msg.type) {
                                             "text" -> {
-                                                Text(
+                                                LinkifiedText(
                                                     text = msg.text,
                                                     color = if (isMine) bubbleSentContentColor else textColor,
                                                     fontSize = 15.sp,
-                                                    lineHeight = 20.sp
+                                                    lineHeight = 20.sp,
+                                                    onUserClick = { username ->
+                                                        scope.launch {
+                                                            try {
+                                                                val user = com.example.utils.SupabaseSetup.client.postgrest["users"].select {
+                                                                    filter { eq("username", username) }
+                                                                }.decodeSingleOrNull<com.example.models.UserProfileData>()
+                                                                if (user != null) {
+                                                                    onUserMentionClick(user.uid)
+                                                                }
+                                                            } catch (e: Exception) {}
+                                                        }
+                                                    }
                                                 )
                                             }
                                             "image", "video" -> {
@@ -764,7 +793,23 @@ fun ChatScreen(
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Icon(if (msg.type == "image") Icons.Default.Image else Icons.Default.Videocam, contentDescription = null, tint = if (isMine) bubbleSentContentColor else textColor, modifier = Modifier.size(16.dp))
                                                 Spacer(Modifier.width(4.dp))
-                                                Text(msg.text, color = if (isMine) bubbleSentContentColor else textColor, fontSize = 14.sp)
+                                                LinkifiedText(
+                                                    text = msg.text,
+                                                    color = if (isMine) bubbleSentContentColor else textColor,
+                                                    fontSize = 14.sp,
+                                                    onUserClick = { username ->
+                                                        scope.launch {
+                                                            try {
+                                                                val user = com.example.utils.SupabaseSetup.client.postgrest["users"].select {
+                                                                    filter { eq("username", username) }
+                                                                }.decodeSingleOrNull<com.example.models.UserProfileData>()
+                                                                if (user != null) {
+                                                                    onUserMentionClick(user.uid)
+                                                                }
+                                                            } catch (e: Exception) {}
+                                                        }
+                                                    }
+                                                )
                                             }
                                         }
                                     }
@@ -1908,4 +1953,67 @@ object MediaTools {
             android.widget.Toast.makeText(ctx, if (isEng) "Download error" else "Ошибка скачивания", android.widget.Toast.LENGTH_SHORT).show()
         }
     }
+}
+
+@Composable
+fun LinkifiedText(
+    text: String,
+    color: androidx.compose.ui.graphics.Color,
+    fontSize: androidx.compose.ui.unit.TextUnit,
+    lineHeight: androidx.compose.ui.unit.TextUnit = androidx.compose.ui.unit.TextUnit.Unspecified,
+    onUserClick: (String) -> Unit = {}
+) {
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+    val urlRegex = "(https?://[\\w-]+(\\.[\\w-]+)+(/[-\\w ./?%&=]*)?)".toRegex()
+    val userRegex = "@([a-zA-Z0-9_]{3,16})".toRegex()
+    
+    val annotatedString = androidx.compose.ui.text.buildAnnotatedString {
+        append(text)
+        
+        urlRegex.findAll(text).forEach { matchResult ->
+            addStyle(
+                style = androidx.compose.ui.text.SpanStyle(color = androidx.compose.ui.graphics.Color(0xFF64B5F6), textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline),
+                start = matchResult.range.first,
+                end = matchResult.range.last + 1
+            )
+            addStringAnnotation(
+                tag = "URL",
+                annotation = matchResult.value,
+                start = matchResult.range.first,
+                end = matchResult.range.last + 1
+            )
+        }
+        
+        userRegex.findAll(text).forEach { matchResult ->
+            addStyle(
+                style = androidx.compose.ui.text.SpanStyle(color = androidx.compose.ui.graphics.Color(0xFF64B5F6), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+                start = matchResult.range.first,
+                end = matchResult.range.last + 1
+            )
+            addStringAnnotation(
+                tag = "USER",
+                annotation = matchResult.groupValues[1],
+                start = matchResult.range.first,
+                end = matchResult.range.last + 1
+            )
+        }
+    }
+    
+    androidx.compose.foundation.text.ClickableText(
+        text = annotatedString,
+        style = androidx.compose.ui.text.TextStyle(
+            color = color,
+            fontSize = fontSize,
+            lineHeight = lineHeight,
+            fontFamily = androidx.compose.ui.text.font.FontFamily.Default
+        ),
+        onClick = { offset ->
+            annotatedString.getStringAnnotations("URL", offset, offset).firstOrNull()?.let { annotation ->
+                try { uriHandler.openUri(annotation.item) } catch(e: Exception) {}
+            }
+            annotatedString.getStringAnnotations("USER", offset, offset).firstOrNull()?.let { annotation ->
+                onUserClick(annotation.item)
+            }
+        }
+    )
 }

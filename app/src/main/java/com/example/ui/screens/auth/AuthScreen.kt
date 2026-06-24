@@ -399,7 +399,16 @@ fun AuthScreen(
                                     onFocus = { }
                                 )
                                 AuthTextField(
-                                    value = profileUsername, onValueChange = { profileUsername = it }, placeholder = s("USERNAME (@ID)", "USERNAME (@ID)"),
+                                    value = profileUsername, 
+                                    onValueChange = { newValue ->
+                                        val lower = newValue.lowercase()
+                                        val filtered = lower.filter { (it in 'a'..'z') || it.isDigit() || it == '_' }
+                                        val underscoreCount = filtered.count { it == '_' }
+                                        if (underscoreCount <= 1 && filtered.length <= 16) {
+                                            profileUsername = filtered
+                                        }
+                                    }, 
+                                    placeholder = s("USERNAME (@ID)", "USERNAME (@ID)"),
                                     isDarkTheme = isDarkTheme,
                                     onFocus = { }
                                 )
@@ -445,7 +454,7 @@ fun AuthScreen(
                             
                             Spacer(Modifier.height(24.dp))
                             MainButton(s("ЗАВЕРШИТЬ", "COMPLETE"), isDarkTheme) {
-                                if (profileName.isNotBlank()) {
+                                if (profileName.isNotBlank() && profileUsername.length >= 3) {
                                     currentMascotState = MascotState.Loading
                                     scope.launch {
                                         try {
@@ -456,7 +465,7 @@ fun AuthScreen(
                                                     try {
                                                         val bytes = context.contentResolver.openInputStream(profileAvatarUri!!)?.readBytes()
                                                         if (bytes != null) {
-                                                            SupabaseSetup.client.storage.from("avatars").upload("${user.id}.jpg", bytes)
+                                                            SupabaseSetup.client.storage.from("avatars").upload("${user.id}.jpg", bytes) { upsert = true }
                                                             finalAvatarUrl = SupabaseSetup.client.storage.from("avatars").publicUrl("${user.id}.jpg")
                                                         }
                                                     } catch (e: Exception) {
